@@ -1,0 +1,9 @@
+std = "roblox+testez"
+
+exclude = ["Packages/*", "**/*.spec.luau"]
+
+[config]
+#
+
+[lints]
+shadowing = "allow"
