@@ -1,0 +1,12 @@
+# Project place file
+/stargather.rbxlx
+/build.rbxlx
+
+# Roblox Studio lock files
+/*.rbxlx.lock
+/*.rbxl.lock
+
+# Wally files
+Packages
+DevPackages
+wally.lock

@@ -1,0 +1,8 @@
+[package]
+name = "nyandev/hybrid-ecs"
+version = "0.0.1"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dev-dependencies]
+testez = "roblox/testez@0.4.1"
