@@ -11,8 +11,14 @@
                 "$path": "DevPackages"
             }
         },
-        "ServerScriptService": {
-            "$path": "tests"
+        "TestService": {
+            "$properties": {
+                "ExecuteWithStudioRun": true
+            },
+            "$className": "TestService",
+            "run": {
+                "$path": "tests.server.luau"
+            }
         }
     }
 }
