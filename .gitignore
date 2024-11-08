@@ -10,3 +10,6 @@
 Packages
 DevPackages
 wally.lock
+
+# VSCode seetings file
+.vscode
