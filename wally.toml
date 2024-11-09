@@ -1,8 +1,22 @@
 [package]
 name = "nyandev/hybrid-ecs"
-version = "0.1.0.0"
+description = "Object oriented ECS library for Roblox"
+version = "0.1.0"
+license = "MIT"
+authors = [
+    "NyandogT9"
+]
 registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
+exclude = [
+    "build.rbxm",
+    "build.rbxl",
+    "build.rbxlx",
+    "build.rbxl.lock",
+    "build.rbxlx.lock",
+    ".vscode",
+    "tests"
+]
 
 [dev-dependencies]
 testez = "roblox/testez@0.4.1"
