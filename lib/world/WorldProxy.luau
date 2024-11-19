@@ -47,13 +47,13 @@ function WorldProxy.copyIdProvider(self : WorldProxy)
     return self._world:copyIdProvider()
 end
 
-function WorldProxy.spawnAt(self : WorldProxy, entityId : number, componentList)
+function WorldProxy.spawnAt(self : WorldProxy, entityId : number, componentDict)
     -- in case an hypothesis is listening for the changes of world
     if self:isBuildingHypothesis() then
-        return self._world:getListenerHypothesis():spawnAt(entityId, componentList)
+        return self._world:getListenerHypothesis():spawnAt(entityId, componentDict)
     end
 
-    return self._world:spawnAt(entityId, componentList)
+    return self._world:spawnAt(entityId, componentDict)
 end
 
 function WorldProxy.getNextId(self : WorldProxy)
@@ -96,31 +96,31 @@ function WorldProxy.contains(self : WorldProxy, entityId : number)
     return self._world:contains(entityId)
 end
 
-function WorldProxy.insert(self : WorldProxy, entityId : number, component)
+function WorldProxy.insert(self : WorldProxy, entityId : number, componentName : string, component)
     -- in case an hypothesis is listening for the changes of world
     if self:isBuildingHypothesis() then
-        return self._world:getListenerHypothesis():insert(entityId, component)
+        return self._world:getListenerHypothesis():insert(entityId, componentName, component)
     end
 
-    return self._world:insert(entityId, component)
+    return self._world:insert(entityId, componentName, component)
 end
 
-function WorldProxy.remove(self : WorldProxy, entityId : number, componentType)
+function WorldProxy.remove(self : WorldProxy, entityId : number, componentName : string)
     -- in case an hypothesis is listening for the changes of world
     if self:isBuildingHypothesis() then
-        return self._world:getListenerHypothesis():remove(entityId, componentType)
+        return self._world:getListenerHypothesis():remove(entityId, componentName)
     end
 
-    return self._world:remove(entityId, componentType)
+    return self._world:remove(entityId, componentName)
 end
 
-function WorldProxy.getComponent(self : WorldProxy, entityId : number, componentType)
+function WorldProxy.getComponent(self : WorldProxy, entityId : number, componentName : string)
     -- in case an hypothesis is listening for the changes of world
     if self:isBuildingHypothesis() then
-        return self._world:getListenerHypothesis():getComponent(entityId, componentType)
+        return self._world:getListenerHypothesis():getComponent(entityId, componentName)
     end
 
-    return self._world:getComponent(entityId, componentType)
+    return self._world:getComponent(entityId, componentName)
 end
 
 function WorldProxy.startCaching(self : WorldProxy)
@@ -135,7 +135,7 @@ function WorldProxy.addLoop(self : WorldProxy, loop)
     return self._world:addLoop(loop)
 end
 
-function WorldProxy.getQueryIterator(self : WorldProxy, archetype)
+function WorldProxy.getQueryIterator(self : WorldProxy, archetype : {string}?)
     return self._world:getQueryIterator(archetype)
 end
 

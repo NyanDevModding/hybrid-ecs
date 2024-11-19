@@ -1,4 +1,5 @@
 local Component = require(script.Parent.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
 
 local DefaultQueryCache = require(script.Parent.query_cache.DefaultQueryCache)
 local SimpleIdProvider = require(script.Parent.id_provider.SimpleIdProvider)
@@ -39,11 +40,12 @@ World.DefaultQueryCache = DefaultQueryCache
 export type WorldClass = typeof(World)
 export type World = typeof(World.new())
 
-type component = Component.Component
+type Component = Component.Component
+type RegisteredComponent = RegisteredComponent.RegisteredComponent
 type defaultComponentInstance = WorldTypes.defaultComponentInstance
 
 type entity = WorldTypes.entity
-export type EntityMirror = EntityMirror.EntityMirror
+type EntityMirror = EntityMirror.EntityMirror
 
 type storageChunk = WorldTypes.storageChunk
 type storage = WorldTypes.storage
@@ -62,13 +64,13 @@ local function assertRightEntityId(entityId : number)
     )
 end
 
-local function entityContains(entity : entity | EntityMirror, archetype : {component}?)
+local function entityContains(entity : entity | EntityMirror, archetype : {string}?)
     if archetype == nil then
         return true
     end
 
-    for _, component in ipairs(archetype) do
-        if entity[component.name] == nil then
+    for _, componentName in ipairs(archetype) do
+        if entity[componentName] == nil then
             return false
         end
     end
@@ -393,26 +395,23 @@ end
     @within World
     @function spawnAt
     @param entityId number -- the id to spawn the entity
-    @param componentList {componentInstance} -- a list of component instances to
+    @param componentDict {[string] : Component} -- a dictionnary of component instances to
     give to the entity
 
-    Spawn an entity at the provided id with the given list of componentInstances
+    Spawn an entity at the provided id with the given dictionnary of components
 
     ```lua
     world:spawnAt(5, {
-        component({value = 5})
+        some_component = component({value = 5})
     })
     local entity = world:get(5)
     ```
 ]=]
-function World.spawnAt(self : World, entityId : number, componentList : {defaultComponentInstance})
+function World.spawnAt(self : World, entityId : number, componentDict : {[string] : Component})
     assertRightEntityId(entityId)
     local chunk = self:_makeChunkAt(entityId)
 
-    local entity = {}
-    for _, componentInstance in ipairs(componentList) do
-        entity[getmetatable(componentInstance).name] = componentInstance
-    end
+    local entity = table.clone(componentDict)
     chunk[_getChunkRelativeId(self, self:_getChunkNumero(entityId), entityId)] = entity
 
     self._idProvider:useId(entityId)
@@ -440,7 +439,7 @@ end
     @within World
     @function spawn
     @param entityId number -- the id to spawn the entity
-    @param componentList {componentInstance} -- a list of component instances to
+    @param componentDict {[string] : Component} -- a dictionnary of components to
     give to the entity
     @return number -- the id of the spawned entity
 
@@ -448,13 +447,13 @@ end
 
     ```lua
     local entity = world:spawn({
-        component({value = 5})
+        some_component = component({value = 5})
     })
     ```
 ]=]
-function World.spawn(self : World, components : {defaultComponentInstance})
+function World.spawn(self : World, componentDict : {[string] : Component})
     local id = self._idProvider:useNextId()
-    self:spawnAt(id, components)
+    self:spawnAt(id, componentDict)
     return id
 end
 
@@ -541,9 +540,10 @@ end
 --[=[
     @within World
     @function insert
-    @param entityId number -- the id of the entity to in which the component is
+    @param entityId number -- the id of the entity in which the component is
     inserted
-    @param component componentInstance -- the component to insert
+    @param componentName string -- the name of the component to insert
+    @param component Component -- the component to insert
 
     Insert a component at the entity correspounding to the provided id.
 
@@ -554,27 +554,27 @@ end
     ```lua
     world:insert(
         5,
+        someComponent:getName(),
         someComponent({value = 10})
     )
     ```
 ]=]
-function World.insert(self : World, entityId : number, component : defaultComponentInstance)
+function World.insert(self : World, entityId : number, componentName : string, component : Component)
     local entity = self:_rawget(entityId)
     assert(
         entity ~= nil,
         string.format(
             "Error while inserting the component :\n    - %s" ..
             "in a non-existant entity at \n    - #%i",
-            getmetatable(component).name,
+            componentName,
             entityId
         )
     )
-    local componentType = getmetatable(component)
     -- if we are replacing an existing component then do not notify cache for
     -- component inserted or removed
     -- replaced is whether if the entity is already there or not
-    local replaced = entity[componentType.name] ~= nil
-    entity[componentType.name] = component
+    local replaced = entity[componentName] ~= nil
+    entity[componentName] = component
 
     -- if it is replacing a component from the same type as him, then there has
     -- been no change in the archetype, we can thus return.
@@ -583,10 +583,10 @@ function World.insert(self : World, entityId : number, component : defaultCompon
     end
 
     local archetype = {}
-    for _, entityComponentInstance in pairs(entity) do
-        table.insert(archetype, getmetatable(entityComponentInstance))
+    for archetypeComponentName, _ in pairs(entity) do
+        table.insert(archetype, archetypeComponentName)
     end
-    self._queryCache:notifyCacheEntityComponentInserted(entityId, archetype, componentType)
+    self._queryCache:notifyCacheEntityComponentInserted(entityId, archetype, componentName)
 end
 
 --[=[
@@ -594,17 +594,17 @@ end
     @function remove
     @param entityId number -- the id of the entity from which the component is
     removed
-    @param componentType componentType -- the component to remove
+    @param componentName string -- the name of the component to remove
 
     Remove the specified component from an entity.
 ]=]
-function World.remove(self : World, entityId : number, componentType : component)
+function World.remove(self : World, entityId : number, componentName : string)
     local entity = self:_rawget(entityId)
     assert(
-        entity[componentType.name] ~= nil,
+        entity[componentName] ~= nil,
         "the component you are trying to remove isn't present in the entity"
     )
-    entity[componentType.name] = nil
+    entity[componentName] = nil
 
     if self._queryCache == nil then
         return
@@ -614,22 +614,22 @@ function World.remove(self : World, entityId : number, componentType : component
     for _, entityComponentInstance in pairs(entity) do
         table.insert(archetype, getmetatable(entityComponentInstance))
     end
-    self._queryCache:notifyCacheEntityComponentRemoved(entityId, archetype, componentType)
+    self._queryCache:notifyCacheEntityComponentRemoved(entityId, archetype, componentName)
 end
 
 --[=[
     @within World
     @function getComponent
     @param entityId number -- the id of the entity to get the component from
-    @param componentType component -- the type of the component to get
-    @return componentInstance -- the componet to get
+    @param componentType RegisteredComponent -- the type of the component to get
+    @return Component? -- the componet to get
 
     Return a component from an entity.
 ]=]
-function World.getComponent(self : World, entityId : number, componentType : component)
+function World.getComponent(self : World, entityId : number, componentName : string)
     local entity = self:_rawget(entityId)
     assert(entity ~= nil, "searching for a component of a non existent entity")
-    return entity[componentType.name]
+    return entity[componentName]
 end
 
 --[=[
@@ -761,7 +761,7 @@ function World._getAllEntitiesIterator(self : World)
     return entityIterator
 end
 
-function World._getRawQueryIterator(self : World, archetype : {component})
+function World._getRawQueryIterator(self : World, archetype : {string})
     local entityIterator = {}
     for chunkNumero, chunk in pairs(self._storage) do
         for relativeId, entity in pairs(chunk) do
@@ -798,7 +798,7 @@ end
 --[=[
     @within World
     @function query
-    @param archetype {component}? -- the component of the entities to get,
+    @param archetype {RegisteredComponent}? -- the components of the entities to get,
     it can be nil, in this case, it returns a pairs of the entire world.
     @return pairs
 
@@ -810,7 +810,7 @@ end
     This method returns an iterator of the actual world, it does not take
     account of any listening hypothesis
 ]=]
-function World.getQueryIterator(self : World, archetype : {component}?)
+function World.getQueryIterator(self : World, archetype : {string}?)
     -- if the archetype isn't nil (we aren't iterating over all the entities)
     if archetype == nil or #archetype == 0 then
         return self:_getAllEntitiesIterator()
@@ -818,6 +818,8 @@ function World.getQueryIterator(self : World, archetype : {component}?)
 
     -- if the world is equipped with a _queryCache
     if self._queryCache ~= nil then
+        -- create componentName based archetype
+
         local pool = self._queryCache:getCached(archetype)
         -- if the query is cached
         if pool ~= nil then
@@ -838,11 +840,18 @@ function World.getQueryIterator(self : World, archetype : {component}?)
     return self:_getRawQueryIterator(archetype)
 end
 
+local function registeredComponentToNames(t : {RegisteredComponent})
+    local result = {}
+    for _, registeredComponent in ipairs(t) do
+        table.insert(result, registeredComponent:getName())
+    end
+    return result
+end
 
 --[=[
     @within World
     @function query
-    @param ... ...component? -- the component of the entities to get, it can be
+    @param ... ...RegisteredComponent? -- the component of the entities to get, it can be
     nil, in this case, it returns a pairs of the entire world.
     @return pairs
 
@@ -867,15 +876,19 @@ end
     You **must** call the world:breakQuery() method if breaking out of a loop
     because else it will start to bug.
 ]=]
-function World.query(self : World, ... : component)
-    return self:_factoryEveryIdQuerier(self:getQueryIterator({...}))
+function World.query(self : World, ... : RegisteredComponent)
+    return self:_factoryEveryIdQuerier(
+        self:getQueryIterator(
+            registeredComponentToNames({...})
+        )
+    )
 end
 
 --[=[
     @within World
     @function query
-    @param ... ...component? -- the component of the entities to get, it can be
-    nil, in this case, it returns a pairs of the entire world.
+    @param ... ...RegisteredComponent? -- the component of the entities to get, it can be
+    nil, in this case, it returns an iterator of the entire world.
     @return () -> number -- return the entityId
 
     Return an iterator function that iterate over the entity of a provided
@@ -893,8 +906,12 @@ end
     end
     ```
 ]=]
-function World.readQuery(self : World, ... : component)
-    return valueReturningIpairs(self:getQueryIterator({...}))
+function World.readQuery(self : World, ... : RegisteredComponent)
+    return valueReturningIpairs(
+        self:getQueryIterator(
+            registeredComponentToNames({...})
+        )
+    )
 end
 
 --[=[

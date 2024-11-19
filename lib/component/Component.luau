@@ -1,126 +1,90 @@
-local ComponentHandler = require(script.Parent.ComponentHandler)
-
+--[=[
+    @class Component
+    @abstract
+]=]
 local Component = {}
 Component.__index = Component
 
 export type ComponentClass = typeof(Component)
 export type Component = typeof(Component.new())
-type componentInstance = typeof(Component.new().__call()) & defaultHandler
-export type genericComponent<standardData, handler> = componentInstance & standardData & handler
 
-local ERROR_PATCH_NIL = (
-    "seems like you forgot to provide replacing data to "
-    .. "patch. If you want to clone the component, consider using the clone "
-    .. "method"
-)
+-- local ABSTRACT_METHOD_ERROR = "The method : %s called in the Component child is " ..
+--     "abstract.\nPlease check that you did override it in the child object."
 
-Component._defaultComponentHandler = ComponentHandler.new({
-    clone = function(self : componentInstance)
-        local component = getmetatable(self)
-        -- as table.clone does not clone the metatable
-        return component(table.clone(self))
-    end,
-    patch = function(self : componentInstance, replacingData : {[any] : any})
-        assert(replacingData ~= nil, ERROR_PATCH_NIL)
-        local component = getmetatable(self)
+-- local function markAsAbstract(methodName : string?)
+--     error(string.format(
+--         ABSTRACT_METHOD_ERROR,
+--         methodName or "unknown?"
+--     ))
+-- end
 
-        -- as table.clone does not preserve the metatable
-        local newData = table.clone(self)
-        for dataName, data in pairs(replacingData) do
-            newData[dataName] = data
-        end
+function Component.extend(self : ComponentClass)
+    return table.clone(self)
+end
 
-        return component(newData)
-    end
-})
-type defaultHandler = typeof(Component._defaultComponentImplementation)
+-- (no need to call this constructor from a child constructor as it does not
+-- do anything and won't)
+function Component.new()
+    return setmetatable({}, Component)
+end
 
--- check for metamethod in the handler and propagate them to the component.
-local function _propagateHandlerMetamethods(component : Component)
-    for methodName, method in pairs(component.handler.implementation) do
-        local start, finish = string.find(methodName, "__")
-        if start == 1 and finish == 2 then
-            component[methodName] = method
+--[=[
+    @within Component
+    @function makeHypothesis
+    @param entityId number -- the id of the entity where the component
+    is located
+    @param componentName string -- the name of the component to create an
+    hypothethic version from
+    @param hypothesis WorldHypothesis -- the hypothesis that ask to hypothtize
+    this component
+    @param hypothesisMerger HypothesisMerger -- the merger where the the
+    component can acquire data
+    @return Component -- the hypothetized component
+
+    Return a component's clone for an hypothesis. This method is called when the
+    hypothesis needs to shadow some component of the world. It is useful when
+    the component need to know some data from the merger to prevent the merge
+    from leading to bugs.
+
+    e.i. : The CompositeComponent override this method to give proper numeros
+    to new multiplied component to prevent them from being merged with others
+    in the merger as they could get the same numero.
+]=]
+function Component.makeHypothesis(self : Component, _, _, _, _)
+    return self:clone()
+end
+
+--[=[
+    @within Component
+    @function fuse
+
+    Fuse another component into this component. It should always merge the
+    other component into the this one.
+
+    Used while merging 2 components of the same type from 2 hypothesis
+
+    It adds the other component's fields to its if they are nil.
+]=]
+function Component.fuseWith(self : Component, other : Component)
+    -- dirty way, pls override it.
+    for k, v in pairs(other) do
+        if self[k] == nil then
+            self[k] = v
         end
     end
 end
 
 --[=[
     @within Component
-    @function new
-    @param name string -- the name of the component
-    @param defaultData {[any] : any}? -- the default data of the component
-    @param handler {[string] : (...any) -> any} -- the secondary index of the
-    component instance
-    @return Component -- the new component
+    @function clone
 
-    Create a new component with a name, its defaultData and a facultative
-    handler. The handler is the secondary index of the component, it means that
-    the instances of this component will have access to its methods.
-
-    ```lua
-    -- creation of the component
-    local HEALTH = Component.new("health", {value = 100})
-    -- you can add an handler for a more oop approach, just add the handler as
-    -- the third argument
-
-    -- instanciation of a component
-    local componentInstance = HEALTH({value = 200}) -- or HEALTH:create({value = 200})
-    ```
+    Return a copy of the component
 ]=]
-function Component.new(name : string, defaultData : {any}?, handler : ComponentHandler.ComponentHandler?)
-    -- propagate default method to the handler
-    if handler ~= nil then
-        handler:include(Component._defaultComponentHandler.implementation)
-    else
-        handler = Component._defaultComponentHandler
-    end
-
-    local component = setmetatable({
-        name = name,
-        defaultData = defaultData,
-        handler = handler,
-        -- prepare the index in prevision of the moment the component will be
-        -- instanciated
-        __index = handler.implementation
-    }, Component)
-    _propagateHandlerMetamethods(component)
-
-    return component
+function Component.clone(self : Component)
+    return table.clone(self)
 end
 
---[=[
-    @within Component
-    @function create
-    @param datas {any} -- the data to create the component with.
-
-    Create a new componentInstance to store in an entity, its metatable is the
-    component.
-]=]
-function Component.create(self : Component, datas : {any}?)
-    if datas ~= nil then
-        datas = table.clone(datas)
-        -- replace nil data with default if defaultData exists
-        if self.defaultData ~= nil then
-            for dataName, data in pairs(self.defaultData) do
-                if datas[dataName] == nil then
-                    datas[dataName] = data
-                end
-            end
-        end
-    elseif self.defaultData ~= nil then
-        -- no provided data (datas = nil) and ddefaultData defined
-        datas = table.clone(self.defaultData)
-    else
-        -- no provided datas and no defaultData -> empty component
-        datas = {}
-    end
-
-    return setmetatable(datas, self)
-end
-
-function Component.__call(self : Component, datas : {any})
-    return self:create(datas)
-end
+-- function Component.toJson()
+-- end
 
 return Component

@@ -1,5 +1,6 @@
 # Hybrid Ecs
-0.1.0.0
+2.0.0
+the API is subject to change
 
 Hybrid ecs is a simple oop ecs partially based on the [Matter](https://github.com/matter-ecs/matter) interface.
 
@@ -14,34 +15,54 @@ If I remember to do it, I should post this program on wally as nyandev/hybrid-ec
 Hybrid ecs, unlike matter, works on a chunk-based storage, prefering the entity getting to the component getting, this means that the world:get() method returns an entity. Actually, it does not returns exactly an entity but its mirror. An EntityMirror stores the entity as one of its private field and provides methods to change its components, keeping track of changes and protecting the entity.
 
 ### OOP ?
-Another thing that differentiate Hybrid from Matter is that, in matter, a change in a component implies changing the entire component. In Hybrid, component are actually changeable as wanted, this means that there is no queryChanged matter thing. But, Hybrid as mentionned earlier is an 'oop' ecs, this means that component are equipped with an interface and methods. This is implemented by handlers that you create almost like classes and pass as an argument to the Component.new() method. It is thus highly recommended to describe implicit fields and interface as a lua or emmylua type like so :
+Another thing that differentiate Hybrid from Matter is that, in matter, a change in a component implies changing the entire component. In Hybrid, component are actually changeable as wanted, in addition, they are actual objects that inherit from the *Component* class and override its method.
 
 ```lua
------
--- In ComponentStandardTypes.luau
-export type someComponentFields = {
-    _someField : number
-}
+-- In ChildComponent.luau
+local Hybrid = require("Hybrid")
+local Component = Hybrid.Component
 
------
--- In SomeComponentHandler.luau
-local StandardTypesModule = require("someComponentFields")
-type standardType = StandardTypesModule.someComponentFields
+local SubComponent = Component:extend()
 
-export type SomeComponentHandler = typeof(SomeComponentHandler)
-export type SomeComponent = standardType & SomeComponentHandler & Handler.defaultHandler -- default handler define the default component methods : patch and clone
--- define the actual handler
+function SubComponent.new(value)
+    local instance = Component.new()
+    setmetatable(instance, SubComponent)
+    instance.value = value
+    return instance
+end
 
------
--- In Components.luau
-export type SomeComponent = SomeComponentHandler.SomeComponent
-Components.local SOME_COMPONENT = Component.new(
-    "some",
-    {}, -- defaultData
-    SomeComponentHandler
-)
+function SubCompoponent.getValue(self : SubComponent)
+    -- some operation
+end
+
+function SubCompoponent.clone(self : SubComponent)
+    -- override some parent operation
+end
+
+return SubComponent
 ```
-or you can also define the standard type directly inside of the handler.
+
+And you will need to register components in a Components.luau enum like so :
+```lua
+-- In Components.luau
+local ComponentsRegistry = {}
+
+-- This method wrap up the requires of this script so it can be required by
+-- the Component classes and later be built by an external script.
+function ComponentsRegistry.buildRegistry()
+    local Health = require("Health")
+
+    ComponentsRegistry.HEALTH = Hybrid.component(
+        "health",
+        function(value)
+            return Health.new(value)
+        end
+    )
+end
+
+return ComponentsRegistry
+```
+You can see that components are registered with a ``name`` and a ``builder method``, a function that returns a new instance of a specific Component. This name should always be bound to that component interface. You can thus consider exporting some ``types`` outside of the enum.
 
 ### Deferred change Query
 As in Matter, Hybrid has a deferred change library. This means that calling a :query() method alter the behaviour of the world and does not modify the world but instead store the changes in something called an hypothesis that will then be merged into a merger that will be commited to the world at the end of the query. This system implies that every iteration of a query is executed on the same world state, the changes made in an iteration won't be in the next one, but will be merged in at the end of the for loop.  
@@ -59,7 +80,12 @@ local world = Hybrid.WorldFactory.createWorld()
 
 Hybrid uses a WorldFactory because instanciating a new world requires wrapping it into a proxy (the proxy is basically the actual class that alters the actions of World by checking if it is actually building an hypothesis).
 
+You can then start creating your Components.luau enum, your component class tree and your systems.
+
 ## Coming progress
 - I'll manage someday to write a json converter for the world to turn into a json obviously
 - I also will optimize some goofy classes like DefaultQueryCache (see how I applied composition on it to let you code your own queryCache)
 - Adding a documentation with moonwave or full-moon i forgot (I've already made all the special doc comments things)
+- Find a way to deserialize query as an hypothesis is independant from the others
+- Recode the loop system as the actual one isn't so powerful
+- Benchmark this program so I can optimize it (I don't have the money for the benchmarker)

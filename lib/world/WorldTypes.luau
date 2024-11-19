@@ -1,6 +1,6 @@
 local Component = require(script.Parent.Parent.component.Component)
 
-export type defaultComponentInstance = Component.genericComponent<any, {(...any) -> any}>
+export type defaultComponentInstance = Component.Component
 
 export type entity = {[string] : defaultComponentInstance}
 

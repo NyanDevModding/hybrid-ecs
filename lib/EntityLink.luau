@@ -93,7 +93,7 @@ end
 
     Return the id of the other entity, linked to this one.
 ]=]
-function EntityLink.getOther(self : EntityLink, world : World.World) : World.EntityMirror
+function EntityLink.getOther(self : EntityLink, world : World.World)
     local othersId = self:getOthersId()
     if othersId == nil then
         return nil

@@ -1,11 +1,13 @@
 local Component = require(script.Parent.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
 local WorldTypes = require(script.Parent.WorldTypes)
 
 local IdProviderInterfaceModule = require(script.Parent.id_provider.IdProviderInterface)
 
 type EntityMirror = typeof(require(script.Parent.EntityMirror))
 -- type EntityMirror = EntityMirror.EntityMirror
-type component = Component.Component
+type Component = Component.Component
+type RegisteredComponent = RegisteredComponent.RegisteredComponent
 
 type defaultComponentInstance = WorldTypes.defaultComponentInstance
 type entity = WorldTypes.entity
@@ -20,17 +22,17 @@ export type HypothesisWorldInterface = {
     closeHypothesis : (self : HypothesisWorldInterface) -> nil,
     resetListenerHypothesis : (self : HypothesisWorldInterface) -> nil,
     copyIdProvider : (self : HypothesisWorldInterface) -> IdProviderInterface,
-    spawnAt : (self : HypothesisWorldInterface, entityId : number, componentList : {defaultComponentInstance}) -> nil,
-    spawn : (self : HypothesisWorldInterface, components : {defaultComponentInstance}) -> number,
+    spawnAt : (self : HypothesisWorldInterface, entityId : number, componentDict : {[string] : Component}) -> nil,
+    spawn : (self : HypothesisWorldInterface, componentDict : {[string] : Component}) -> number,
     despawn : (self : HypothesisWorldInterface, entityId : number) -> nil,
-    get : (self : HypothesisWorldInterface, entityId : number) -> EntityMirror,
+    get : (self : HypothesisWorldInterface, entityId : number) -> EntityMirror?,
     contains : (self : HypothesisWorldInterface, entityId : number) -> boolean,
-    insert : (self : HypothesisWorldInterface, entityId : number, component : defaultComponentInstance) -> nil,
-    remove : (self : HypothesisWorldInterface, entityId : number, componentType : component) -> nil,
-    getComponent : (self : HypothesisWorldInterface, entityId : number, componentType : component) -> defaultComponentInstance,
-    getQueryIterator : (self : HypothesisWorldInterface, archetype : {component}?) -> {number},
-    query : (self : HypothesisWorldInterface, ...component) -> (() -> number),
-    readQuery : (self : HypothesisWorldInterface, ...component) -> (() -> number),
+    insert : (self : HypothesisWorldInterface, entityId : number, componentName : string, component : Component) -> nil,
+    remove : (self : HypothesisWorldInterface, entityId : number, componentName : string) -> nil,
+    getComponent : (self : HypothesisWorldInterface, entityId : number, componentType : RegisteredComponent) -> defaultComponentInstance,
+    getQueryIterator : (self : HypothesisWorldInterface, archetype : {string}?) -> {number},
+    query : (self : HypothesisWorldInterface, ...RegisteredComponent) -> (() -> number),
+    readQuery : (self : HypothesisWorldInterface, ...RegisteredComponent) -> (() -> number),
     breakQuery : (self : HypothesisWorldInterface) -> nil,
 }
 

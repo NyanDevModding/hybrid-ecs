@@ -1,5 +1,6 @@
 local WorldHypothesisMerger = require(script.Parent.WorldHypothesisMerger)
 local Component = require(script.Parent.Parent.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.Parent.Parent.component.RegisteredComponent)
 local EntityMirror = require(script.Parent.Parent.EntityMirror)
 
 local HypothesisWorldInterfaceModule = require(script.Parent.Parent.HypothesisWorldInterface)
@@ -8,7 +9,7 @@ local WorldTypes = require(script.Parent.Parent.WorldTypes)
 
 -- types
 type component = Component.Component
-type defaultComponentInstance = WorldTypes.defaultComponentInstance
+type RegisteredComponent = RegisteredComponent.RegisteredComponent
 
 type entity = WorldTypes.entity
 
@@ -33,13 +34,13 @@ local function assertRightEntityId(entityId : number)
     )
 end
 
-local function entityContains(entity : entity | EntityMirror, archetype : {component}?)
+local function entityContains(entity : entity | EntityMirror, archetype : {string}?)
     if archetype == nil then
         return true
     end
 
-    for _, component in ipairs(archetype) do
-        if entity[component.name] == nil then
+    for _, componentName in ipairs(archetype) do
+        if entity[componentName] == nil then
             return false
         end
     end
@@ -164,7 +165,7 @@ end
 
     Listener method of world:spawnAt().
 ]=]
-function WorldHypothesis.spawnAt(self : WorldHypothesis, entityId : number, componentList : {defaultComponentInstance})
+function WorldHypothesis.spawnAt(self : WorldHypothesis, entityId : number, componentDict : {[string] : component})
     assertRightEntityId(entityId)
 
     -- if the id is in use, then throw
@@ -176,10 +177,7 @@ function WorldHypothesis.spawnAt(self : WorldHypothesis, entityId : number, comp
     end
 
     -- create the entity
-    local entity = {}
-    for _, componentInstance in ipairs(componentList) do
-        entity[getmetatable(componentInstance).name] = componentInstance
-    end
+    local entity = table.clone(componentDict)
     self._additionalStorage[entityId] = entity
 
     self._idProvider:useId(entityId)
@@ -195,9 +193,9 @@ end
 
     Listener method for world:spawn()
 ]=]
-function WorldHypothesis.spawn(self : WorldHypothesis, components : {defaultComponentInstance})
+function WorldHypothesis.spawn(self : WorldHypothesis, componentDict : {[string] : component})
     local id = self._idProvider:useNextId()
-    self:spawnAt(id, components)
+    self:spawnAt(id, componentDict)
     return id
 end
 
@@ -249,19 +247,21 @@ end
     @within WorldHypothesis
     @function get
     @param entityId number -- the id of the entity to get
-    @return EntityMirror -- the mirror of the entity
+    @return EntityMirror? -- the mirror of the entity
 
     Listener method of world:get()
 ]=]
 function WorldHypothesis.get(self : WorldHypothesis, entityId : number)
-    if self._additionalStorage[entityId] ~= nil then
-        -- return a mirror with the WorldHypothesis as a proxy of the world
-        return EntityMirror.new(self, entityId, self._additionalStorage[entityId])
-    elseif self._world:contains(entityId) then
-        local entityMirror = self._world:get(entityId)
-        entityMirror.world = self
-        return entityMirror
+    -- if it is not in the hypothesis but in the world then shadow it
+    if self._additionalStorage[entityId] ~= nil and self._world:contains(entityId) then
+        self:_shadowWorldEntity(entityId)
     end
+
+    -- if it is in the hypothesis then return its entity mirror
+    if self._additionalStorage[entityId] ~= nil then
+        return EntityMirror.new(self, entityId, self._additionalStorage[entityId])
+    end
+
     return nil
 end
 
@@ -294,12 +294,18 @@ end
 ]=]
 function WorldHypothesis._shadowWorldEntity(self : WorldHypothesis, entityId : number)
     -- shadow a world entity by copying it in the hypothetic storage
-    local mirror = self:get(entityId)
+    local mirror = self._world:get(entityId)
+
+    if mirror == nil then
+        return nil
+    end
+
     local entity = {}
+
     -- selene: allow(manual_table_clone)
     -- selene does not understand that :iterate returns a pairs result
-    for componentName, componentInstance in mirror:iterate() do
-        entity[componentName] = componentInstance
+    for componentName, component in mirror:iterate() do
+        entity[componentName] = component:makeHypothesis(entityId, componentName, self, self._merger)
     end
     self._additionalStorage[entityId] = entity
 end
@@ -313,14 +319,14 @@ end
 
     Listener method of world:insert().
 ]=]
-function WorldHypothesis.insert(self : WorldHypothesis, entityId : number, component : defaultComponentInstance)
+function WorldHypothesis.insert(self : WorldHypothesis, entityId : number, componentName : string, component : component)
     -- assert if the entity exist
     assert(
         self:contains(entityId),
         string.format(
             "Error while inserting the component :\n    - %s\n" ..
             "in a non-existant entity at \n    - #%i",
-            getmetatable(component).name,
+            componentName,
             entityId
         )
     )
@@ -329,7 +335,7 @@ function WorldHypothesis.insert(self : WorldHypothesis, entityId : number, compo
         self:_shadowWorldEntity(entityId)
     end
 
-    self._additionalStorage[entityId][getmetatable(component).name] = component
+    self._additionalStorage[entityId][componentName] = component
 end
 
 --[=[
@@ -337,18 +343,18 @@ end
     @function remove
     @param entityId number -- the id of the entity from which the component is
     removed
-    @param componentType componentType -- the component to remove
+    @param componentName string -- the name of the component to remove
 
     Listerner method of world:remove()
 ]=]
-function WorldHypothesis.remove(self : WorldHypothesis, entityId : number, componentType : component)
+function WorldHypothesis.remove(self : WorldHypothesis, entityId : number, componentName : string)
     assert(
-        self:contains(entityId) and self:getComponent(entityId, componentType) ~= nil,
+        self:contains(entityId) and self:getComponent(entityId, componentName) ~= nil,
         string.format(
             "Error while removing the component :\n    - %s\n" ..
             "for the entity entity at \n    - #%i\n" ..
             "The component isn't present in the entity.",
-            componentType.name,
+            componentName,
             entityId
         )
     )
@@ -357,7 +363,7 @@ function WorldHypothesis.remove(self : WorldHypothesis, entityId : number, compo
     if self._additionalStorage[entityId] == nil then
         self:_shadowWorldEntity(entityId)
     end
-    self._additionalStorage[entityId][componentType.name] = nil
+    self._additionalStorage[entityId][componentName] = nil
 end
 
 --[=[
@@ -369,16 +375,17 @@ end
 
     Listener method of world:getComponent().
 ]=]
-function WorldHypothesis.getComponent(self : WorldHypothesis, entityId : number, componentType : component)
-    if self._additionalStorage[entityId] then
-        return self._additionalStorage[entityId][componentType.name]
+function WorldHypothesis.getComponent(self : WorldHypothesis, entityId : number, componentName : string)
+    if self._additionalStorage[entityId] == nil then
+        self:_shadowWorldEntity(entityId)
     end
-    return self._world:getComponent(entityId, componentType)
+
+    return self._additionalStorage[entityId][componentName]
 end
 
 -- check if the id provided by the world:query is still valid in the
 -- modifications of the hypothesis
-function WorldHypothesis._nextWorldValidId(self : WorldHypothesis, index, subWorldEntityIterator, archetype)
+function WorldHypothesis._nextWorldValidId(self : WorldHypothesis, index, subWorldEntityIterator, archetype : {string}?)
     local nextEntityId = subWorldEntityIterator[index]
 
     -- if we reached the end of the iteration
@@ -410,53 +417,34 @@ end
 --[=[
     @within WorldHypothesis
     @function _factoryEveryIdHypothesisQuerier
-    @param archetype {component} -- the archetype provided for query
+    @param archetype {string}? -- the archetype provided for query
     @return () -> number -- the iterator function
 
     Return an iterator function for the provided archetype. This method also
     manage hypothesis and mergers of the query.
 ]=]
-function WorldHypothesis._factoryEveryIdHypothesisQuerier(self : WorldHypothesis, archetype)
-    local subWorldEntityIterator = self._world:getQueryIterator(archetype)
-    local hypothesisEntityIterator = self:_getAdditionalQueryIterator(archetype)
+function WorldHypothesis._factoryEveryIdHypothesisQuerier(self : WorldHypothesis, archetype : {string}?)
+    local hypotheticIterator = self:getQueryIterator(archetype)
+
     -- allow query in query by recursive hypothesises
     local newMerger = WorldHypothesisMerger.new(self)
     local newHypothesis = WorldHypothesis.new(self, newMerger)
     self:openHypothesis(newHypothesis)
 
-    local subWorldIndex = 0
-    local hypothesisIndex = 0
-    local iteratingOverSubWorld = true
+    local index = 0
     return function()
         -- at the beginning of the function as this is called right after an
         -- iteration and the loop operations
-        if subWorldIndex or 0 >= 1 then
+        if index > 0 then
             -- merge the modifications and clear the hypothesis so it is
             -- reusable
             self:resetListenerHypothesis()
         end
 
-        -- the actual iteration*
-        local entityId
-
-        -- iterate over the subWorld (an hypothesis in the case of a nested query)
-        if iteratingOverSubWorld then
-            subWorldIndex += 1
-            subWorldIndex = self:_nextWorldValidId(subWorldIndex, subWorldEntityIterator, archetype)
-            if subWorldIndex == nil then
-                iteratingOverSubWorld = false
-            else
-                entityId = subWorldEntityIterator[subWorldIndex]
-            end
-        end
-
-        -- iterate over the hypothesis (the entity with the archetype changed
-        -- into the query archetype or simply spawned with the concerned
-        -- archetype)
-        if not iteratingOverSubWorld then
-            hypothesisIndex += 1
-            entityId = hypothesisEntityIterator[hypothesisIndex]
-        end
+        -- the actual iteration
+        -- iterate over the iterator table
+        index += 1
+        local entityId = hypotheticIterator[index]
 
         if entityId then
             return entityId
@@ -472,13 +460,13 @@ end
 --[=[
     @within WorldHypothesis
     @function _factoryEveryIdHypothesisQuerier
-    @param archetype {component}? -- the archetype provided for query
+    @param archetype {string}? -- the archetype provided for query
     @return () -> number -- the iterator function
 
     Return an iterator function for the provided archetype in the additional
     storage of this hypothesis only.
 ]=]
-function WorldHypothesis._getAdditionalQueryIterator(self : WorldHypothesis, archetype : {component}?)
+function WorldHypothesis._getAdditionalQueryIterator(self : WorldHypothesis, archetype : {string}?)
     local queryIterator = {}
     for entityId, entity in pairs(self._additionalStorage) do
         if archetype == nil or entityContains(entity, archetype) then
@@ -488,16 +476,30 @@ function WorldHypothesis._getAdditionalQueryIterator(self : WorldHypothesis, arc
     return queryIterator
 end
 
+-- checks if a value is present in both tables
+local function isDuplicated(t1, t2, v)
+    for _, v1 in ipairs(t1) do
+        if v1 == v then
+            for _, v2 in ipairs(t2) do
+                if v2 == v then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
 --[=[
     @within WorldHypothesis
     @function _factoryEveryIdHypothesisQuerier
-    @param archetype : {component} -- the archetype provided
+    @param archetype : {string}? -- the archetype provided
     @return () -> number -- the iterator function
 
     Return an iterator function for the provided archetype in all the
     subWorlds and the additional storage of the hypothesis
 ]=]
-function WorldHypothesis.getQueryIterator(self : WorldHypothesis, archetype : {component}?)
+function WorldHypothesis.getQueryIterator(self : WorldHypothesis, archetype : {string}?)
     local queryIterator = self._world:getQueryIterator(archetype)
     local additionnalQueryIterator = self:_getAdditionalQueryIterator(archetype)
     local listEnd = #queryIterator
@@ -516,6 +518,9 @@ function WorldHypothesis.getQueryIterator(self : WorldHypothesis, archetype : {c
         -- or if it is just deleted by the hypothesis
         or
         self:isMarkedForDeletion(id)
+        -- or if it is duplicated in the lists
+        or
+        isDuplicated(queryIterator, additionnalQueryIterator, id)
         then
             queryIterator[index] = additionnalQueryIterator[nextAdditionalId]
             nextAdditionalId += 1
@@ -523,7 +528,7 @@ function WorldHypothesis.getQueryIterator(self : WorldHypothesis, archetype : {c
     end
 
     -- find the actual end of the list
-    for i = listEnd, 1, -1 do
+    for i = listEnd, 0, -1 do
         if queryIterator[i] == nil then
             listEnd = i
         else
@@ -548,10 +553,17 @@ function WorldHypothesis.getQueryIterator(self : WorldHypothesis, archetype : {c
             if nextAdditionalId <= additionalListEnd then
                 queryIterator[index + 1] = additionnalQueryIterator[nextAdditionalId]
                 nextAdditionalId += 1
+                if listEnd == index then
+                    listEnd += 1
+                end
                 continue
             end
 
-            -- else, move the last element to this position
+            -- elseif index < listeEnd, move the last element to this position
+            if index >= listEnd then
+                break
+            end
+
             queryIterator[index + 1] = queryIterator[listEnd]
             queryIterator[listEnd] = nil
             listEnd -= 1
@@ -568,21 +580,27 @@ function WorldHypothesis.getQueryIterator(self : WorldHypothesis, archetype : {c
     return queryIterator
 end
 
+local function registeredComponentToNames(t : {RegisteredComponent})
+    local result = {}
+    for _, registeredComponent in ipairs(t) do
+        table.insert(result, registeredComponent:getName())
+    end
+    return result
+end
+
 --[=[
     @within WorldHypothesis
     @function _factoryEveryIdHypothesisQuerier
-    @param ... ...component -- the archetype provided
+    @param ... ...RegisteredComponent? -- the archetype provided
     @return () -> number -- the iterator function
 
     Listener method of world:query()
 ]=]
-function WorldHypothesis.query(self : WorldHypothesis, ... : component)
-    local archetype = {...}
-
+function WorldHypothesis.query(self : WorldHypothesis, ... : RegisteredComponent)
     -- this should fire a nested query in world and change the
     -- _listenerHypothesis by calling the openHypothesis method
     -- The new Hypothesis should have this one as its _world.
-    return self:_factoryEveryIdHypothesisQuerier(archetype)
+    return self:_factoryEveryIdHypothesisQuerier(registeredComponentToNames({...}))
 end
 
 local function valueReturningIpairs(t)
@@ -599,13 +617,17 @@ end
 --[=[
     @within WorldHypothesis
     @function _factoryEveryIdHypothesisQuerier
-    @param ... ...component -- the archetype provided
+    @param ... ...RegisteredComponent? -- the archetype provided
     @return () -> number -- the iterator function
 
     Listener method of world:readQuery()
 ]=]
-function WorldHypothesis.readQuery(self : WorldHypothesis, ... : component)
-    return valueReturningIpairs(self:getQueryIterator({...}))
+function WorldHypothesis.readQuery(self : WorldHypothesis, ... : RegisteredComponent)
+    return valueReturningIpairs(
+        self:getQueryIterator(
+            registeredComponentToNames({...})
+        )
+    )
 end
 
 --[=[

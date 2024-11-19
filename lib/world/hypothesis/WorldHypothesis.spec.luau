@@ -3,8 +3,29 @@ local WorldHypothesis = require(script.Parent.WorldHypothesis)
 local WorldHypothesisMerger = require(script.Parent.WorldHypothesisMerger)
 local SimpleIdProvider = require(script.Parent.Parent.id_provider.SimpleIdProvider)
 local Component = require(script.Parent.Parent.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.Parent.Parent.component.RegisteredComponent)
 
 local MAX_REYCLE_BIN_SIZE = 16
+
+local TestComponent = Component:extend()
+do
+    TestComponent.__index = TestComponent
+
+    function TestComponent.new(v, v2)
+        return setmetatable({
+            value = v,
+            secondValue = v2
+        }, TestComponent)
+    end
+
+    function TestComponent.getValue(self)
+        return self.value
+    end
+
+    function TestComponent.getSecondValue(self)
+        return self.secondValue
+    end
+end
 
 local function newMock(returning : any?)
     return setmetatable({
@@ -43,8 +64,18 @@ return function ()
     local hypothesis
 
 
-    local SOME_COMPONENT = Component.new("some")
-    local OTHER_COMPONENT = Component.new("other")
+    local SOME_COMPONENT = RegisteredComponent.new(
+        "some",
+        function(v)
+            return TestComponent.new(v)
+        end
+    )
+    local OTHER_COMPONENT = RegisteredComponent.new(
+        "other",
+        function(v)
+            return TestComponent.new(v)
+        end
+    )
 
     beforeEach(function()
         testWorld = WorldFactory.createWorld(nil, false)
@@ -52,14 +83,14 @@ return function ()
 
     describe("WorldHypothesis", function()
         it("should check itself and the world if it contains an entity", function()
-            testWorld:spawnAt(1, {SOME_COMPONENT()})
-            testWorld:spawnAt(2, {SOME_COMPONENT()})
+            testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+            testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
 
             testMerger = WorldHypothesisMerger.new(testWorld)
             testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-            testHypothesis:spawnAt(3, {SOME_COMPONENT()})
-            testHypothesis:spawnAt(4, {SOME_COMPONENT()})
+            testHypothesis:spawnAt(3, {some = SOME_COMPONENT:build()})
+            testHypothesis:spawnAt(4, {some = SOME_COMPONENT:build()})
             testHypothesis:despawn(2)
             testHypothesis:despawn(4)
 
@@ -81,7 +112,7 @@ return function ()
             hypothesis:openHypothesis({})
             subWorldMock:wasCalled("openHypothesis")
 
-            hypothesis:closeHypothesis()({})
+            hypothesis:closeHypothesis()
             subWorldMock:wasCalled("closeHypothesis")
 
             hypothesis:resetListenerHypothesis()
@@ -104,7 +135,7 @@ return function ()
                     testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                     expect(function()
-                        testHypothesis:getComponent(1, SOME_COMPONENT)
+                        testHypothesis:getComponent(1, SOME_COMPONENT:getName())
                     end).to.throw()
                 end)
                 it("should check if the world contains an entity", function()
@@ -112,7 +143,7 @@ return function ()
                     testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                     testHypothesis:spawnAt(1, {
-                        SOME_COMPONENT()
+                        some = SOME_COMPONENT:build()
                     })
 
                     expect(testHypothesis:contains(1)).to.be.equal(true)
@@ -122,32 +153,30 @@ return function ()
                         testMerger = WorldHypothesisMerger.new(testWorld)
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                        local component = SOME_COMPONENT({
-                            first = "data"
-                        })
+                        local component = SOME_COMPONENT:build("data")
     
                         testHypothesis:spawnAt(1, {
-                            component
+                            some = component
                         })
     
-                        expect(testHypothesis:get(1).some).to.be.equal(component)
+                        expect(testHypothesis:getComponent(1, SOME_COMPONENT:getName())).to.be.equal(component)
                     end)
                     it("should take an unused id if there is one", function()
                         testMerger = WorldHypothesisMerger.new(testWorld)
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
                         
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         testHypothesis:spawnAt(2, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         testHypothesis:despawn(1)
     
                         local newEntityId = testHypothesis:spawn({
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         expect(newEntityId).to.be.equal(1)
@@ -157,15 +186,21 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         expect(function()
-                            testHypothesis:spawnAt(-5, OTHER_COMPONENT)
+                            testHypothesis:spawnAt(-5, {
+                                other = OTHER_COMPONENT:build()
+                            })
                         end).to.throw()
     
                         expect(function()
-                            testHypothesis:spawnAt(0, OTHER_COMPONENT)
+                            testHypothesis:spawnAt(0, {
+                                other = OTHER_COMPONENT:build()
+                            })
                         end).to.throw()
     
                         expect(function()
-                            testHypothesis:spawnAt(55.5, OTHER_COMPONENT)
+                            testHypothesis:spawnAt(55.5, {
+                                other = OTHER_COMPONENT:build()
+                            })
                         end).to.throw()
                     end)
                 end)
@@ -175,7 +210,7 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         expect(function()
@@ -189,7 +224,7 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         testHypothesis:despawn(1)
@@ -201,7 +236,7 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         expect(function()
@@ -215,11 +250,11 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         expect(function()
-                            testHypothesis:insert(1, OTHER_COMPONENT())
+                            testHypothesis:insert(1, OTHER_COMPONENT:getName(), OTHER_COMPONENT:build())
                         end).never.to.throw()
     
                         expect(testHypothesis:get(1).other).to.be.ok()
@@ -229,12 +264,12 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
-                        local replacing = SOME_COMPONENT()
+                        local replacing = SOME_COMPONENT:build()
     
                         expect(function()
-                            testHypothesis:insert(1, replacing)
+                            testHypothesis:insert(1, SOME_COMPONENT:getName(), replacing)
                         end).never.to.throw()
     
                         expect(testHypothesis:get(1).some).to.be.equal(replacing)
@@ -246,11 +281,11 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         expect(function()
-                            testHypothesis:remove(1, SOME_COMPONENT)
+                            testHypothesis:remove(1, SOME_COMPONENT:getName())
                         end).never.to.throw()
     
                         expect(testHypothesis:get(1).some).never.to.be.ok()
@@ -260,11 +295,11 @@ return function ()
                         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                         testHypothesis:spawnAt(1, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
     
                         expect(function()
-                            testHypothesis:remove(1, OTHER_COMPONENT)
+                            testHypothesis:remove(1, OTHER_COMPONENT:getName())
                         end).to.throw()
                     end)
                 end)
@@ -275,7 +310,7 @@ return function ()
                     testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
                     
                     testHypothesis:spawnAt(1, {
-                        SOME_COMPONENT()
+                        some = SOME_COMPONENT:build()
                     })
     
                     for _, shouldBeNil in testHypothesis:query() do
@@ -288,7 +323,7 @@ return function ()
                     
                     for i = 1, 5, 1 do
                         testHypothesis:spawnAt(i, {
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
                     end
                     
@@ -301,17 +336,17 @@ return function ()
                     testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
                     testWorld:spawnAt(1, {
-                        SOME_COMPONENT()
+                        some = SOME_COMPONENT:build()
                     })
                     testWorld:spawnAt(2, {
-                        SOME_COMPONENT()
+                        some = SOME_COMPONENT:build()
                     })
 
                     testMerger = WorldHypothesisMerger.new(testWorld)
                     testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
                     for _ = 2, 10, 1 do
                         testHypothesis:spawn({
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
                     end
 
@@ -326,15 +361,20 @@ return function ()
                     testMerger = WorldHypothesisMerger.new(testWorld)
                     testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                    local YET_ANOTHER_COMPONENT = Component.new("yet_antother")
+                    local YET_ANOTHER_COMPONENT = RegisteredComponent.new(
+                        "yet_another",
+                        function(v)
+                            return TestComponent.new(v)
+                        end
+                    )
 
                     for _ = 1, 5, 1 do
                         testWorld:spawn({
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
                         testWorld:spawn({
-                            SOME_COMPONENT(),
-                            OTHER_COMPONENT()
+                            some = SOME_COMPONENT:build(),
+                            other = OTHER_COMPONENT:build()
                         })
                     end
 
@@ -343,18 +383,18 @@ return function ()
 
                     for _ = 1, 5, 1 do
                         testHypothesis:spawn({
-                            SOME_COMPONENT()
+                            some = SOME_COMPONENT:build()
                         })
                         testHypothesis:spawn({
-                            SOME_COMPONENT(),
-                            OTHER_COMPONENT()
+                            some = SOME_COMPONENT:build(),
+                            other = OTHER_COMPONENT:build()
                         })
                     end
 
                     -- single component check
                     local someEntityAmount = 0
                     for entityId in testHypothesis:query(SOME_COMPONENT) do
-                        expect(testHypothesis:getComponent(entityId, SOME_COMPONENT)).to.be.ok()
+                        expect(testHypothesis:getComponent(entityId, SOME_COMPONENT:getName())).to.be.ok()
                         someEntityAmount += 1
                     end
                     expect(someEntityAmount).to.be.equal(20)
@@ -362,8 +402,8 @@ return function ()
                     -- double components check
                     local someAndOtherEntityAmount = 0
                     for entityId in testHypothesis:query(SOME_COMPONENT, OTHER_COMPONENT) do
-                        expect(testHypothesis:getComponent(entityId, SOME_COMPONENT)).to.be.ok()
-                        expect(testHypothesis:getComponent(entityId, OTHER_COMPONENT)).to.be.ok()
+                        expect(testHypothesis:getComponent(entityId, SOME_COMPONENT:getName())).to.be.ok()
+                        expect(testHypothesis:getComponent(entityId, OTHER_COMPONENT:getName())).to.be.ok()
                         someAndOtherEntityAmount += 1
                     end
                     expect(someAndOtherEntityAmount).to.be.equal(10)

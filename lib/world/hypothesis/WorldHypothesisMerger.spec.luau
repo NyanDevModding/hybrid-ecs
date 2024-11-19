@@ -1,13 +1,44 @@
 local WorldFactory  = require(script.Parent.Parent.WorldFactory)
 local Component = require(script.Parent.Parent.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.Parent.Parent.component.RegisteredComponent)
 local WorldHypothesisMerger = require(script.Parent.WorldHypothesisMerger)
 local WorldHypothesis = require(script.Parent.WorldHypothesis)
+
+local TestComponent = Component:extend()
+do
+    TestComponent.__index = TestComponent
+
+    function TestComponent.new(v, v2)
+        return setmetatable({
+            value = v,
+            secondValue = v2
+        }, TestComponent)
+    end
+
+    function TestComponent.getValue(self)
+        return self.value
+    end
+
+    function TestComponent.getSecondValue(self)
+        return self.secondValue
+    end
+end
 
 local MAX_REYCLE_BIN_SIZE = 16
 
 return function ()
-    local SOME_COMPONENT = Component.new("some")
-    local OTHER_COMPONENT = Component.new("other")
+    local SOME_COMPONENT = RegisteredComponent.new(
+        "some",
+        function(v)
+            return TestComponent.new(v)
+        end
+    )
+    local OTHER_COMPONENT = RegisteredComponent.new(
+        "other",
+        function(v)
+            return TestComponent.new(v)
+        end
+    )
 
     local testWorld
     local testHypothesis
@@ -18,20 +49,20 @@ return function ()
         testMerger = WorldHypothesisMerger.new(testWorld)
         testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
     end)
-    
+
     describe("WorldHypothesisMerger", function()
 
         it("should check itself and the world if it contains an entity", function()
             testWorld = WorldFactory.createWorld(nil, false)
 
-            testWorld:spawnAt(1, {SOME_COMPONENT()})
-            testWorld:spawnAt(2, {SOME_COMPONENT()})
+            testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+            testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
 
             testMerger = WorldHypothesisMerger.new(testWorld)
             testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-            testHypothesis:spawnAt(3, {SOME_COMPONENT()})
-            testHypothesis:spawnAt(4, {SOME_COMPONENT()})
+            testHypothesis:spawnAt(3, {some = SOME_COMPONENT:build()})
+            testHypothesis:spawnAt(4, {some = SOME_COMPONENT:build()})
             testHypothesis:despawn(2)
             testHypothesis:despawn(4)
 
@@ -48,8 +79,8 @@ return function ()
             it("should store entities as despawned", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
-                testWorld:spawnAt(2, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
@@ -67,8 +98,8 @@ return function ()
             it("shouldn't let a despawn mark be duplicated", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
-                testWorld:spawnAt(2, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
@@ -91,12 +122,12 @@ return function ()
             it("should store inserts", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                testHypothesis:insert(1, OTHER_COMPONENT())
+                testHypothesis:insert(1, OTHER_COMPONENT:getName(), OTHER_COMPONENT:build())
 
                 testHypothesis:merge()
 
@@ -106,19 +137,19 @@ return function ()
                 end).never.to.throw()
 
                 expect(testWorld:contains(1)).to.be.equal(true)
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).to.be.ok()
-                expect(testWorld:getComponent(1, OTHER_COMPONENT)).to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).to.be.ok()
+                expect(testWorld:getComponent(1, OTHER_COMPONENT:getName())).to.be.ok()
             end)
             it("should store replacing inserts", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build(1)})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                testHypothesis:insert(1, SOME_COMPONENT())
-                local hypotethisComponent = testHypothesis:getComponent(1, SOME_COMPONENT)
+                testHypothesis:insert(1, SOME_COMPONENT:getName(), SOME_COMPONENT:build(2))
+                local hypotethisComponent = testHypothesis:getComponent(1, SOME_COMPONENT:getName())
 
                 testHypothesis:merge()
 
@@ -128,18 +159,18 @@ return function ()
                 end).never.to.throw()
 
                 expect(testWorld:contains(1)).to.be.equal(true)
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).to.be.ok()
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).to.be.equal(hypotethisComponent)
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName()):getValue()).to.be.equal(hypotethisComponent:getValue())
             end)
             it("should store removals", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                testHypothesis:remove(1, SOME_COMPONENT)
+                testHypothesis:remove(1, SOME_COMPONENT:getName())
 
                 testHypothesis:merge()
 
@@ -149,22 +180,22 @@ return function ()
                 end).never.to.throw()
 
                 expect(testWorld:contains(1)).to.be.equal(true)
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).never.to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).never.to.be.ok()
             end)
             it("should fuse archetype changes", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                testHypothesis:remove(1, SOME_COMPONENT)
+                testHypothesis:remove(1, SOME_COMPONENT:getName())
                 testHypothesis:merge()
 
                 local secondHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                secondHypothesis:insert(1, OTHER_COMPONENT())
+                secondHypothesis:insert(1, OTHER_COMPONENT:getName(), OTHER_COMPONENT:build())
                 -- it shouldn't replace the previously removed components
                 secondHypothesis:merge()
 
@@ -173,12 +204,12 @@ return function ()
                     testMerger:reset()
                 end).never.to.throw()
 
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).never.to.be.ok()
-                expect(testWorld:getComponent(1, OTHER_COMPONENT)).to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).never.to.be.ok()
+                expect(testWorld:getComponent(1, OTHER_COMPONENT:getName())).to.be.ok()
             end)
             it("should store spawns", function()
-                testHypothesis:spawnAt(1, {SOME_COMPONENT()})
-                testHypothesis:spawn({SOME_COMPONENT()})
+                testHypothesis:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testHypothesis:spawn({some = SOME_COMPONENT:build()})
 
                 testHypothesis:merge()
 
@@ -189,15 +220,15 @@ return function ()
 
                 expect(testWorld:contains(1)).to.be.equal(true)
                 expect(testWorld:contains(2)).to.be.equal(true)
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).to.be.ok()
-                expect(testWorld:getComponent(2, SOME_COMPONENT)).to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).to.be.ok()
+                expect(testWorld:getComponent(2, SOME_COMPONENT:getName())).to.be.ok()
             end)
             it("should not allow concurrent spawns", function()
-                testHypothesis:spawnAt(1, {SOME_COMPONENT()})
+                testHypothesis:spawnAt(1, {some = SOME_COMPONENT:build()})
                 testHypothesis:merge()
 
                 local secondHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
-                secondHypothesis:spawnAt(1, {SOME_COMPONENT()})
+                secondHypothesis:spawnAt(1, {some = SOME_COMPONENT:build()})
 
                 expect(function()
                     secondHypothesis:merge()
@@ -213,17 +244,17 @@ return function ()
                 expect(first:getNextId()).to.be.equal(second:getNextId())
             end)
             it("should never get concurrent spawns when using the :spawn method", function()
-                testHypothesis:spawn({SOME_COMPONENT()})
+                testHypothesis:spawn({some = SOME_COMPONENT:build()})
                 expect(testHypothesis:getNextId()).to.be.equal(2)
-                testHypothesis:spawn({SOME_COMPONENT()})
+                testHypothesis:spawn({some = SOME_COMPONENT:build()})
                 expect(testHypothesis:getNextId()).to.be.equal(3)
 
                 testHypothesis:merge()
 
                 local secondTestHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
-                secondTestHypothesis:spawn({SOME_COMPONENT()})
+                secondTestHypothesis:spawn({some = SOME_COMPONENT:build()})
                 expect(secondTestHypothesis:getNextId()).to.be.equal(4)
-                secondTestHypothesis:spawn({SOME_COMPONENT()})
+                secondTestHypothesis:spawn({some = SOME_COMPONENT:build()})
                 expect(secondTestHypothesis:getNextId()).to.be.equal(5)
 
                 expect(function()
@@ -242,41 +273,41 @@ return function ()
             it("should commit the insertions", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                testHypothesis:insert(1, OTHER_COMPONENT())
+                testHypothesis:insert(1, OTHER_COMPONENT:getName(), OTHER_COMPONENT:build())
 
                 testHypothesis:merge()
 
                 testMerger:commit()
                 testMerger:reset()
 
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).to.be.ok()
-                expect(testWorld:getComponent(1, OTHER_COMPONENT)).to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).to.be.ok()
+                expect(testWorld:getComponent(1, OTHER_COMPONENT:getName())).to.be.ok()
             end)
             it("should commit the removals", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)
 
-                testHypothesis:remove(1, SOME_COMPONENT)
+                testHypothesis:remove(1, SOME_COMPONENT:getName())
 
                 testHypothesis:merge()
 
                 testMerger:commit()
                 testMerger:reset()
 
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).never.to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).never.to.be.ok()
             end)
             it("should commit the spawns", function()
-                testHypothesis:spawnAt(1, {SOME_COMPONENT()})
-                testHypothesis:spawn({SOME_COMPONENT()})
+                testHypothesis:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testHypothesis:spawn({some = SOME_COMPONENT:build()})
 
                 testHypothesis:merge()
 
@@ -285,14 +316,14 @@ return function ()
 
                 expect(testWorld:contains(1)).to.be.equal(true)
                 expect(testWorld:contains(2)).to.be.equal(true)
-                expect(testWorld:getComponent(1, SOME_COMPONENT)).to.be.ok()
-                expect(testWorld:getComponent(2, SOME_COMPONENT)).to.be.ok()
+                expect(testWorld:getComponent(1, SOME_COMPONENT:getName())).to.be.ok()
+                expect(testWorld:getComponent(2, SOME_COMPONENT:getName())).to.be.ok()
             end)
             it("should commit the despawns", function()
                 testWorld = WorldFactory.createWorld(nil, false)
 
-                testWorld:spawnAt(1, {SOME_COMPONENT()})
-                testWorld:spawnAt(2, {SOME_COMPONENT()})
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
 
                 testMerger = WorldHypothesisMerger.new(testWorld)
                 testHypothesis = WorldHypothesis.new(testWorld:getRawWorld(), testMerger)

@@ -13,3 +13,6 @@ wally.lock
 
 # VSCode seetings file
 .vscode
+
+# TODO file
+TODO.md

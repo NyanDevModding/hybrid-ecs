@@ -1,8 +1,22 @@
 local WorldFactory  = require(script.Parent.world.WorldFactory)
 local Component = require(script.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.component.RegisteredComponent)
 local EntityLink = require(script.Parent.EntityLink)
 
-local entityLinkComponent = Component.new("test_entity_link")
+local EntityLinkComponent = Component:extend()
+do
+    EntityLinkComponent.__index = EntityLinkComponent
+
+    function EntityLinkComponent.new(link)
+        return setmetatable({
+            link = link
+        }, EntityLinkComponent)
+    end
+end
+
+local ENTITY_LINK = RegisteredComponent.new("test_entity_link", function(link)
+    return EntityLinkComponent.new(link)
+end)
 
 return function ()
     describe("EntityLink", function()
@@ -72,15 +86,11 @@ return function ()
             -- spawn 2 entities with references by entityLinks
             local world = WorldFactory.createWorld(nil, false)
             world:spawnAt(1, {
-                entityLinkComponent({
-                    link = EntityLink.new(1)
-                })
+                test_entity_link = ENTITY_LINK:build(EntityLink.new(1))
             })
             local someEntity = world:get(1)
             world:spawnAt(2, {
-                entityLinkComponent({
-                    link = EntityLink.new(2)
-                })
+                test_entity_link = ENTITY_LINK:build(EntityLink.new(2))
             })
             local someOtherEntity = world:get(2)
 

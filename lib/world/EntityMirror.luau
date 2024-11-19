@@ -58,8 +58,8 @@ end
 
     Return the component stored as the name of the provided componentType
 ]=]
-function EntityMirror.getComponent(self : EntityMirror, componentType : component)
-    return self._entity[componentType.name]
+function EntityMirror.getComponent(self : EntityMirror, componentName : string)
+    return self._entity[componentName]
 end
 
 --[=[
@@ -69,8 +69,8 @@ end
 
     Call the world:insert method on the mirrored entity
 ]=]
-function EntityMirror.insert(self : EntityMirror, componentInstance : defaultComponentInstance)
-    self.world:insert(self.id, componentInstance)
+function EntityMirror.insert(self : EntityMirror, component : component)
+    self.world:insert(self.id, component)
 end
 
 --[=[
@@ -80,8 +80,8 @@ end
 
     Call the world:remove method on the mirrored entity
 ]=]
-function EntityMirror.remove(self : EntityMirror, componentType : component)
-    self.world:remove(self.id, componentType)
+function EntityMirror.remove(self : EntityMirror, componentName : string)
+    self.world:remove(self.id, componentName)
 end
 
 --[=[

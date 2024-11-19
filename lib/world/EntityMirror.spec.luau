@@ -1,8 +1,22 @@
 local WorldFactory  = require(script.Parent.WorldFactory)
 local Component = require(script.Parent.Parent.component.Component)
+local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
+
+local TestComponent = Component:extend()
+do
+    TestComponent.__index = TestComponent
+
+    function TestComponent.new(v)
+        return setmetatable({
+            value = v
+        }, TestComponent)
+    end
+end
 
 return function ()
-    local SOME_COMPONENT = Component.new("some")
+    local SOME_COMPONENT = RegisteredComponent.new("some", function(v)
+        return TestComponent.new(v)
+    end)
 
     local testWorld
     beforeEach(function()
@@ -12,7 +26,7 @@ return function ()
     describe("EntityMirror", function()
         it("should store a reference to an entity", function()
             testWorld:spawnAt(1, {
-                SOME_COMPONENT()
+                some = SOME_COMPONENT:build()
             })
 
             local entity = testWorld:get(1)
@@ -20,9 +34,9 @@ return function ()
             expect(entity._entity).to.be.equal(testWorld:get(1)._entity)
         end)
         it("should index its components", function()
-            local component = SOME_COMPONENT()
+            local component = SOME_COMPONENT:build()
             testWorld:spawnAt(1, {
-                component
+                some = component
             })
 
             local entity = testWorld:get(1)
@@ -30,18 +44,18 @@ return function ()
             expect(entity.some).to.be.ok()
         end)
         it("should give access to the entity's components", function()
-            local component = SOME_COMPONENT()
+            local component = SOME_COMPONENT:build()
             testWorld:spawnAt(1, {
-                component
+                some = component
             })
 
             local entity = testWorld:get(1)
 
-            expect(entity:getComponent(SOME_COMPONENT)).to.be.equal(component)
+            expect(entity:getComponent(SOME_COMPONENT:getName())).to.be.equal(component)
         end)
         it("should let the client break the reference", function()
             testWorld:spawnAt(1, {
-                SOME_COMPONENT()
+                some = SOME_COMPONENT:build()
             })
 
             local entity = testWorld:get(1)
@@ -54,7 +68,7 @@ return function ()
         end)
         it("should let the client despawn it and terminate", function()
             testWorld:spawnAt(1, {
-                SOME_COMPONENT()
+                some = SOME_COMPONENT:build()
             })
 
             local entity = testWorld:get(1)

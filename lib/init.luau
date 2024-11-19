@@ -1,28 +1,30 @@
 local WorldFactory  = require(script.world.WorldFactory)
+local EntityMirror  = require(script.world.EntityMirror)
 local Loop = require(script.Loop)
 local Component = require(script.component.Component)
-local ComponentMultiplicator = require(script.component.ComponentMultiplicator)
-local ComponentHandler = require(script.component.ComponentHandler)
+local CompositeComponent = require(script.component.CompositeComponent)
+local RegisteredComponent = require(script.component.RegisteredComponent)
+local RegisteredMultiComponent = require(script.component.RegisteredMultiComponent)
 local EntityLink = require(script.EntityLink)
 
 local WorldInterfaceModule = require(script.world.WorldInterface)
 
-local newComponent = function(name : string, defaultData : {any}, handler : {[string] : (...any) -> any})
-    return Component.new(name, defaultData, handler)
+local registerComponent = function(name : string, builder : (...any) -> {})
+    return RegisteredComponent.new(name, builder)
 end
 
-local newComponentMultiplicator = function(name : string, defaultData : {any}, handler : {[string] : (...any) -> any})
-    return ComponentMultiplicator.new(name, defaultData, handler)
-end
-
-local newHandler = function(methods : {(self : Component.Component, ...any) -> any}?)
-    return ComponentHandler.new(methods)
+local registerCompositeComponent = function(
+    name : string, builder : (...any) -> {},
+    compositeBuilder: ((builder : () -> any, ...any) 
+    -> CompositeComponent.CompositeComponent)?
+)
+    return RegisteredMultiComponent.new(name, builder, compositeBuilder)
 end
 
 export type World = WorldInterfaceModule.WorldInterface
+export type EntityMirror = EntityMirror.EntityMirror
 export type Loop = Loop.Loop
 export type Component = Component.Component
-export type ComponentMultiplicator = ComponentMultiplicator.ComponentMultiplicator
 
 --[=[
     @class Hybrid
@@ -35,8 +37,6 @@ export type ComponentMultiplicator = ComponentMultiplicator.ComponentMultiplicat
     I KNOW THAT THIS IS NOT THE PRINCIPE OF AN ECS
     I know that it leads to a not full implementation by systems but yeah
     use matter, this library is bad
-    nah its not that bad but idk
-    yeah its bad
     ITS MY FIRST LIBRARY
     IVE MADE IT WITH MY HEART
     LOST MY SOUL ON THOSE .SPEC.LUAU
@@ -60,86 +60,88 @@ Hybrid.Loop = Loop
     @within Hybrid
     @function component
     @param name string -- the name of the component
-    @param defaultData {[any] : any} -- the default data of the component
-    @param handler {[string] : (...any) -> any} -- the secondary index of the
-    component instance
-    @return Component -- the new component
+    @param builder (...any) -> Component -- the builder method of the component
+    @return RegisteredComponent
 
-    Create a new component with a name, its defaultData and a facultative
-    handler. the handler is the secondary index of the component, it means that
-    the instances of this component will have access to its methods.
+    Create a new componentBuilder with a name and a builder method.
 
     ```lua
-    -- creation of the component
-    local HEALTH = Hybrid.component("health", {value = 100})
-    -- you can add an handler for a more oop approach, just add the handler as
-    -- the third argument
+    -- the component's class
+    local Health = require("Health")
+
+    -- creation of the component factory
+    local HEALTH = Hybrid.component(
+        "health",
+        function(value)
+            Health.new(value or 100)
+        end
+    )
 
     -- instanciation of a component
-    local componentInstance = HEALTH({value = 110}) -- or HEALTH:create({value = 110})
+    local componentInstance = HEALTH(110) -- or HEALTH:create(110)
     ```
-]=]
-Hybrid.component = newComponent
 
---[=[
-    @within Hybrid
-    @function multicomponent
-    @param name string -- the name of the componentMultiplicator
-    @param defaultData {[any] : any} -- the default data of the componentMultiplicator
-    @param handler {[string] : (...any) -> any} -- the secondary index of the
-    component instance
-    @return ComponentMultiplicator -- the new componentMultiplicator
-
-    Create a new componentMultiplicator with a name, its defaultData and a
-    facultative handler. the handler is the secondary index of the component,
-    it means that the instances of this component will have access to its
-    methods.
-
-    The component multiplicator lets you create different component of the same
-    type, just like slots, you would have slot_1 and slot_2 in a single entity
-    instead of an entire inventory component that cant be composed with
-    others components.
-
-    To get a specific component, just stores its numero like : ```lua
-    inputData.inputNumber = 5``` if there is an inputSlot which numero is 5.
+    Storing components should be done by requiring the Components class
+    inside of a function.
 
     ```lua
-    -- creation of the componentMultiplicator
-    local HEALTH = Hybrid.multicomponent("health", {value = 100})
-    -- you can add an handler for a more oop approach, just add the handler as
-    -- the third argument
+    -- Components.luau
+    local ComponentsRegistry = {}
 
-    -- instanciation of a component
-    local componentInstance = HEALTH(1)({value = 110}) -- or HEALTH(1):create({value = 110})
-    ```
-]=]
-Hybrid.multicomponent = newComponentMultiplicator
+    function ComponentsRegistry.buildRegistry()
+        local Health = require("Health")
 
---[=[
-    @within Hybrid
-    @function Handler
-    @param methods methods : {(self : Component.Component, ...any) -> any}? --
-    the methods of the handler, it can be nil
-    @return ComponentHandler
-
-    Create a new componentHandler, used in an entity to give it methods oop
-    properties.
-
-    A good manner to declare an handler, is by defining it as if it was a
-    class :
-
-    ```lua
-    -- in a ModulScript named "Somehandler"
-    local SomeHandler = Hybrid.Handler()
-
-    function SomeHandler.someOperation(self : componentInstance)
-        -- some operation
+        ComponentsRegistry.HEALTH = Hybrid.component(
+            "health",
+            function(value)
+                return Health.new(value)
+            end
+        )
     end
 
-    return SomeHandler
+    return ComponentsRegistry
     ```
+
+    As it allows both module to store reference to each other.
+    The Component child class just mustn't build the registry, it will be
+    performed by another module like build.luau or idk
 ]=]
-Hybrid.Handler = newHandler
+Hybrid.component = registerComponent
+
+--[=[
+    @within Hybrid
+    @function component
+    @param name string -- the name of the component
+    @param builder (...any) -> Component -- the builder method of the component
+    @param compositeBuilder compositeBuilder: ((builder : () -> any, ...any)
+    -> CompositeComponent.CompositeComponent)? -- the builder of the composite
+    component
+    @return RegisteredMultiComponent
+
+    You can register a multiComponent, a component that itself stores
+    some components of a same type.
+
+    ```lua
+    -- Components.luau
+    local ComponentsRegistry = {}
+
+    function ComponentsRegistry.buildRegistry()
+        local Slot = require("Slot")
+
+        ComponentsRegistry.SLOT = Hybrid.multiComponent(
+            "health",
+            function(value)
+                return Slot.new(value)
+            end
+        )
+    end
+
+    return ComponentsRegistry
+    ```
+    By default, the compositeBuilder returns a CompositeComponent. You can
+    extend this class to return your own CompositeComponent
+]=]
+Hybrid.multiComponent = registerCompositeComponent
 
 --[=[
     @within Hybrid
@@ -167,5 +169,37 @@ Hybrid.Handler = newHandler
     ```
 ]=]
 Hybrid.EntityLink = EntityLink
+
+--[=[
+    @within Hybrid
+    @prop Component
+
+    Abstract class component, to inherit to create a child component class
+    like so :
+    ```lua
+    local Hybrid = require("Hybrid")
+    local Component = Hybrid.Component
+
+    local SubComponent = Hybrid.Component:extend()
+    -- override parent's methods etc.
+
+    -- this method is located in the class, this means that it is also
+    -- inherited :
+    local SubComponent = require("SubComponent")
+
+    local DeepSubComponent = SubComponent:extend()
+    -- override parent's methods
+    ```
+]=]
+Hybrid.Component = Component
+
+--[=[
+    @within Hybrid
+    @prop CompositeComponent
+
+    The multiComponent class, can be extended to create some child
+    multiComponent.
+]=]
+Hybrid.CompositeComponent = CompositeComponent
 
 return table.freeze(Hybrid)

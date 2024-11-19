@@ -1,12 +1,11 @@
 local RunService = game:GetService("RunService")
-local Component = require(script.Parent.Parent.Parent.component.Component)
+
+local WorldTypes = require(script.Parent.Parent.WorldTypes)
 
 local DefaultQueryCache = {}
 DefaultQueryCache.__index = DefaultQueryCache
 
-type component = Component.Component
-type defaultComponentInstance = Component.genericComponent<any, {(...any) -> any}>
-
+type defaultComponentInstance = WorldTypes.defaultComponentInstance
 type entity = {[string] : defaultComponentInstance}
 
 export type QueryCacheInterface = {}
@@ -53,7 +52,7 @@ type EntityPoolClass = typeof(EntityPool)
 type EntityPool = typeof(EntityPool.new())
 
 do
-    function EntityPool.new(queryCache : DefaultQueryCache, components : {component})
+    function EntityPool.new(queryCache : DefaultQueryCache, components : {string})
         return setmetatable({
             _pool = {},
             _red = true,
@@ -63,29 +62,6 @@ do
     end
 
     function EntityPool.initialize(self : EntityPool, concernedEntityIds : {number})
-        -- local archetypeSize = #self.archetype
-        -- -- iterate over storage chunks
-        -- for _, chunk in ipairs(self.queryCache.world._storage) do
-        --     -- iterate over entities in the chunk
-        --     for entityId, _entity : entity in pairs(chunk) do
-        --         -- iterate over the archetype and checks if the components are
-        --         -- included in the entity.
-        --         -- if the includedComponentAmount is the same length as the
-        --         -- archetypeSize then it means that all the archetype
-        --         -- components are included.
-        --         local includedComponentAmount = 0
-        --         for _, component in ipairs(self.archetype) do
-        --             if _entity[component.name] ~= nil then
-        --                 includedComponentAmount += 1
-        --             end
-        --         end
-
-        --         -- add it to the entityPool
-        --         if includedComponentAmount == archetypeSize then
-        --             self:add(entityId)
-        --         end
-        --     end
-        -- end
         for _, entityId in ipairs(concernedEntityIds) do
             self:add(entityId)
         end
@@ -128,30 +104,30 @@ end
 
 -- DefaultQueryCache operations
 
-type cacheElement = {entityPool : EntityPool?, pairs : {[component] : cacheElement}?}
+type cacheElement = {entityPool : EntityPool?, pairs : {[string] : cacheElement}?}
 -- componentStack is the path in the _queryCache that leads to the cacheElement
-type queryCacheCommandExecute = (self : queryCacheCommandInterface, queryCache : DefaultQueryCache, component : component, cacheElement : cacheElement, componentStack : {[number] : component}) -> any
+type queryCacheCommandExecute = (self : queryCacheCommandInterface, queryCache : DefaultQueryCache, componentName : string, cacheElement : cacheElement, componentStack : {[number] : string}) -> any
 -- either a simple function or a table with __call defined
-type queryCacheCommandInterface = (queryCache : DefaultQueryCache, component : component, cacheElement : cacheElement, componentStack : {[number] : component}) -> any
+type queryCacheCommandInterface = (queryCache : DefaultQueryCache, componentName : string, cacheElement : cacheElement, componentStack : {[number] : string}) -> any
 
 -- here are some methods that are doubled, this is because sometime we don't
 -- want some of the data that provide these methods.
 -- REJECT CODE REUSE, EMBRACE BRUT OPTIMIZATION
 
 -- inner work of _executeOnCacheElement
-local function _executeOnCacheElementRecursive(cacheElement : cacheElement, components : {component}, stack : {[number] : component}, command : queryCacheCommandInterface, queryCache)
+local function _executeOnCacheElementRecursive(cacheElement : cacheElement, components : {string}, stack : {[number] : string}, command : queryCacheCommandInterface, queryCache)
     local continueSearch = #components > 1
-    for k, component in ipairs(components) do
-        if cacheElement.pairs ~= nil and cacheElement.pairs[component] ~= nil then
+    for k, componentName in ipairs(components) do
+        if cacheElement.pairs ~= nil and cacheElement.pairs[componentName] ~= nil then
             -- if the archetype is finished, this has to be the cacheElement we
             -- are searching for.
             if continueSearch then
                 local newComponents = table.clone(components)
                 table.remove(newComponents, k)
                 -- recursively search for the next components
-                table.insert(stack, component)
+                table.insert(stack, componentName)
                 local commandResult : any = _executeOnCacheElementRecursive(
-                    cacheElement.pairs[component],
+                    cacheElement.pairs[componentName],
                     newComponents,
                     stack,
                     command,
@@ -164,8 +140,8 @@ local function _executeOnCacheElementRecursive(cacheElement : cacheElement, comp
                 table.remove(stack, #stack)
             else
                 -- found the cacheElement
-                table.insert(stack, component)
-                return command(queryCache, component, cacheElement.pairs[component], stack)
+                table.insert(stack, componentName)
+                return command(queryCache, componentName, cacheElement.pairs[componentName], stack)
             end
         end
     end
@@ -173,10 +149,10 @@ local function _executeOnCacheElementRecursive(cacheElement : cacheElement, comp
 end
 
 -- inner work of _executeOnCacheElement but without the stack argument
-local function _executeOnCacheElementRecursiveWithoutStack(cacheElement : cacheElement, components : {component}, command : queryCacheCommandInterface, queryCache)
+local function _executeOnCacheElementRecursiveWithoutStack(cacheElement : cacheElement, components : {string}, command : queryCacheCommandInterface, queryCache)
     local continueSearch = #components > 1
-    for k, component in ipairs(components) do
-        if cacheElement.pairs ~= nil and cacheElement.pairs[component] ~= nil then
+    for k, componentName in ipairs(components) do
+        if cacheElement.pairs ~= nil and cacheElement.pairs[componentName] ~= nil then
             -- if the archetype is finished, this has to be the cacheElement we
             -- are searching for.
             if continueSearch then
@@ -184,7 +160,7 @@ local function _executeOnCacheElementRecursiveWithoutStack(cacheElement : cacheE
                 table.remove(newComponents, k)
                 -- recursively search for the next components
                 local commandResult : any = _executeOnCacheElementRecursiveWithoutStack(
-                    cacheElement.pairs[component],
+                    cacheElement.pairs[componentName],
                     newComponents,
                     command,
                     queryCache
@@ -195,7 +171,7 @@ local function _executeOnCacheElementRecursiveWithoutStack(cacheElement : cacheE
                 end
             else
                 -- found the cacheElement
-                return command(queryCache, component, cacheElement.pairs[component])
+                return command(queryCache, componentName, cacheElement.pairs[componentName])
             end
         end
     end
@@ -205,7 +181,7 @@ end
 --[=[
     @within QueryCache
     @function _executeOnCacheElement
-    @param components {component} -- the archetype on which we execute the
+    @param components {string} -- the archetype on which we execute the
     command
     @param command queryCacheCommandExecute -- the command to execute
     @param needStack boolean -- if it will use the stack, if its nil then it
@@ -217,22 +193,22 @@ end
     This system is meant for code reuse and flexibility by the use of the
     command design pattern.
 ]=]
-function DefaultQueryCache._executeOnCacheElement(self : DefaultQueryCache, components : {component}, command : queryCacheCommandExecute, needStack : boolean)
+function DefaultQueryCache._executeOnCacheElement(self : DefaultQueryCache, components : {string}, command : queryCacheCommandExecute, needStack : boolean)
     if #components == 1 then
         return command(self, components[1], self._cache[components[1]], if needStack then components else nil)
     end
 
-    -- iterate over the components of the archetype to call the recursive
-    -- function on each first components
-    for k, component in ipairs(components) do
-        if self._cache[component] then
+    -- iterate over the component names of the archetype to call the recursive
+    -- function on each first component
+    for k, componentName in ipairs(components) do
+        if self._cache[componentName] then
             local result
             local subComponents = table.clone(components)
             table.remove(subComponents, k)
             if needStack then
-                result = _executeOnCacheElementRecursive(self._cache[component], subComponents, {}, command, self)
+                result = _executeOnCacheElementRecursive(self._cache[componentName], subComponents, {}, command, self)
             else
-                result = _executeOnCacheElementRecursiveWithoutStack(self._cache[component], subComponents, command, self)
+                result = _executeOnCacheElementRecursiveWithoutStack(self._cache[componentName], subComponents, command, self)
             end
             subComponents = nil
 
@@ -244,23 +220,23 @@ function DefaultQueryCache._executeOnCacheElement(self : DefaultQueryCache, comp
 end
 
 -- inner work of _executeOnCache
-local function _executeRecursiveOnCache(cacheElement : cacheElement, component : component, stack : {[number] : component}, command : queryCacheCommandInterface, queryCache)
-    command(queryCache, component, cacheElement, stack)
+local function _executeRecursiveOnCache(cacheElement : cacheElement, componentName : string, stack : {[number] : string}, command : queryCacheCommandInterface, queryCache)
+    command(queryCache, componentName, cacheElement, stack)
     if cacheElement.pairs then
-        for pairedComponent, pairedCacheElement in ipairs(cacheElement.pairs) do
-            table.insert(stack, pairedComponent)
-            _executeRecursiveOnCache(pairedCacheElement, pairedComponent, stack, command, queryCache)
+        for pairedComponentName, pairedCacheElement in ipairs(cacheElement.pairs) do
+            table.insert(stack, pairedComponentName)
+            _executeRecursiveOnCache(pairedCacheElement, pairedComponentName, stack, command, queryCache)
             table.remove(stack, #stack)
         end
     end
 end
 
 -- inner work of _executeOnCache but without the stack argument
-local function _executeRecursiveOnCacheWithoutStack(cacheElement : cacheElement, component : component, command : queryCacheCommandInterface, queryCache)
-    command(queryCache, component, cacheElement)
+local function _executeRecursiveOnCacheWithoutStack(cacheElement : cacheElement, componentName : string, command : queryCacheCommandInterface, queryCache)
+    command(queryCache, componentName, cacheElement)
     if cacheElement.pairs then
-        for pairedComponent, pairedCacheElement in ipairs(cacheElement.pairs) do
-            _executeRecursiveOnCacheWithoutStack(pairedCacheElement, pairedComponent, command, queryCache)
+        for pairedComponentName, pairedCacheElement in ipairs(cacheElement.pairs) do
+            _executeRecursiveOnCacheWithoutStack(pairedCacheElement, pairedComponentName, command, queryCache)
         end
     end
 end
@@ -279,19 +255,19 @@ end
 function DefaultQueryCache._executeOnCache(self : DefaultQueryCache, command : queryCacheCommandInterface, needStack : boolean)
     -- iterate over the components on top to call the recursive function on
     -- each of them
-    for component, cacheElement in pairs(self._cache) do
-        if self._cache[component] then
+    for componentName, cacheElement in pairs(self._cache) do
+        if self._cache[componentName] then
             if needStack then
-                _executeRecursiveOnCache(cacheElement, component, {}, command, self)
+                _executeRecursiveOnCache(cacheElement, componentName, {}, command, self)
             else
-                _executeRecursiveOnCacheWithoutStack(cacheElement, component, command, self)
+                _executeRecursiveOnCacheWithoutStack(cacheElement, componentName, command, self)
             end
         end
     end
 end
 
 -- inner work of _executeOnArchetypeComposite
-local function _executeRecursiveOnArchetypeComposites(cacheElement : cacheElement, components : {component}, stack : {[number] : component}, command : queryCacheCommandInterface)
+local function _executeRecursiveOnArchetypeComposites(cacheElement : cacheElement, components : {string}, stack : {[number] : string}, command : queryCacheCommandInterface)
     command(nil, nil, cacheElement, stack)
 
     -- if there is no pairs then there is no purpose to iterating over archetype.
@@ -299,8 +275,8 @@ local function _executeRecursiveOnArchetypeComposites(cacheElement : cacheElemen
         return
     end
 
-    for k, component in ipairs(components) do
-        local subCacheElement = cacheElement.pairs[component]
+    for k, componentName in ipairs(components) do
+        local subCacheElement = cacheElement.pairs[componentName]
         if subCacheElement ~= nil then
             local subComponents = table.clone(components)
             table.insert(stack, subComponents[k])
@@ -313,7 +289,7 @@ local function _executeRecursiveOnArchetypeComposites(cacheElement : cacheElemen
 end
 
 -- inner work of _executeOnArchetypeComposite without stack
-local function _executeRecursiveOnArchetypeCompositesWithoutStack(cacheElement : cacheElement, components : {component}, command : queryCacheCommandInterface)
+local function _executeRecursiveOnArchetypeCompositesWithoutStack(cacheElement : cacheElement, components : {string}, command : queryCacheCommandInterface)
     command(nil, nil, cacheElement)
 
     -- if there is no pairs then there is no purpose to iterating over archetype.
@@ -321,8 +297,8 @@ local function _executeRecursiveOnArchetypeCompositesWithoutStack(cacheElement :
         return
     end
 
-    for k, component in ipairs(components) do
-        local subCacheElement = cacheElement.pairs[component]
+    for k, componentName in ipairs(components) do
+        local subCacheElement = cacheElement.pairs[componentName]
         if subCacheElement ~= nil then
             local subComponents = table.clone(components)
             table.remove(subComponents, k)
@@ -335,7 +311,7 @@ end
 --[=[
     @within QueryCache
     @function _executeOnArchetypeComposite
-    @param components {component} -- the archetype
+    @param components {string} -- the archetype
     @param command queryCacheCommandInterface -- the command to execute
     @return nil
 
@@ -345,20 +321,20 @@ end
     Example : if components = {1, 2}, it will execute the command on the
     cacheElements (if they exist) 1, 2 and 1-2
 ]=]
-function DefaultQueryCache._executeOnArchetypeComposite(self : DefaultQueryCache, components : {component}, command : queryCacheCommandInterface, needStack : boolean)
-    for index, component in ipairs(components) do
+function DefaultQueryCache._executeOnArchetypeComposite(self : DefaultQueryCache, components : {string}, command : queryCacheCommandInterface, needStack : boolean)
+    for index, componentName in ipairs(components) do
         -- continue if there is no cacheElement
-        if self._cache[component] == nil then
+        if self._cache[componentName] == nil then
             continue
         end
         local subComponents = table.clone(components)
         table.remove(subComponents, index)
         if needStack then
-            local stack = {component}
-            _executeRecursiveOnArchetypeComposites(self._cache[component], subComponents, stack, command)
+            local stack = {componentName}
+            _executeRecursiveOnArchetypeComposites(self._cache[componentName], subComponents, stack, command)
             stack = nil
         else
-            _executeRecursiveOnArchetypeCompositesWithoutStack(self._cache[component], subComponents, command)
+            _executeRecursiveOnArchetypeCompositesWithoutStack(self._cache[componentName], subComponents, command)
         end
         table.clear(subComponents)
     end
@@ -413,7 +389,7 @@ do
 end
 
 --[=[
-    @enum _CacheCommandsS
+    @enum _CacheCommands
 
     all the cache commands, can either be a function or a cacheCommand object,
     it must reflect the queryCacheCommandInterface.
@@ -422,7 +398,7 @@ local _CacheCommands : {[string] : queryCacheCommandInterface} = {
     GET_COMMAND = function(_, _, cacheElement) : cacheElement
         return cacheElement
     end,
-    UNCACHE_COMMAND = function(queryCache, component, cacheElement, componentStack) : nil
+    UNCACHE_COMMAND = function(queryCache, componentName, cacheElement, componentStack) : nil
         -- can't if archetype not cached
         if cacheElement == nil then
             return
@@ -437,7 +413,7 @@ local _CacheCommands : {[string] : queryCacheCommandInterface} = {
         -- launch the recursive uncache process that delete the parents in the
         -- archetype if they were'nt stocking any data other that this deleted
         -- child
-        queryCache:_recursiveUncache(component, cacheElement, componentStack)
+        queryCache:_recursiveUncache(componentName, cacheElement, componentStack)
     end,
     CLEAR_COMMAND = function(queryCache, _, cacheElement) : nil
         -- delete the entityPool
@@ -474,10 +450,10 @@ local _CacheCommands : {[string] : queryCacheCommandInterface} = {
     -- used when an entity archetype is modified
     ADD_ENTITY_TO_UNNOTIFIED_CACHE_ELEMENT = CacheCommand.create(
         function(self, _, _, cacheElement, componentStack)
-            for _, component in ipairs(componentStack) do
-                -- if the added component is present then add the entity to the
+            for _, componentName in ipairs(componentStack) do
+                -- if the added componentName is present then add the entity to the
                 -- pool
-                if component == self.component then
+                if componentName == self.componentName then
                     cacheElement.entityPool:add(self.entityId)
                 end
             end
@@ -487,10 +463,10 @@ local _CacheCommands : {[string] : queryCacheCommandInterface} = {
     -- used when an entity archetype is modified
     REMOVE_ENTITY_FROM_UNNOTIFIED_CACHE_ELEMENT = CacheCommand.create(
         function(self, _, _, cacheElement, componentStack)
-            for _, component in ipairs(componentStack) do
+            for _, componentName in ipairs(componentStack) do
                 -- if the removed component is present then add the entity to
                 -- the pool
-                if component == self.component then
+                if componentName == self.componentName then
                     cacheElement.entityPool:remove(self.entityId)
                 end
             end
@@ -501,7 +477,7 @@ local _CacheCommands : {[string] : queryCacheCommandInterface} = {
 DefaultQueryCache._CacheCommands = _CacheCommands
 
 -- inner work of the command UNCACHE
-function DefaultQueryCache._recursiveUncache(self : DefaultQueryCache, component, cacheElement, componentStack)
+function DefaultQueryCache._recursiveUncache(self : DefaultQueryCache, componentName, cacheElement, componentStack)
     -- if a cacheElement has no pair nor entityPool, it should be deleted
 
     -- can't if there is an active entityPool
@@ -543,7 +519,7 @@ function DefaultQueryCache._recursiveUncache(self : DefaultQueryCache, component
     -- use the stack of the parent as an archetype
     local parentCacheElement : cacheElement = self:_executeOnCacheElement(parentCacheElementStack, _CacheCommands.GET_COMMAND, false)
 
-    parentCacheElement.pairs[component] = nil
+    parentCacheElement.pairs[componentName] = nil
 
     -- if it stores data, then no use to delete it
     if parentCacheElement.entityPool ~= nil then
@@ -560,7 +536,7 @@ function DefaultQueryCache._recursiveUncache(self : DefaultQueryCache, component
 end
 
 
-function DefaultQueryCache.getCached(self : DefaultQueryCache, components : {[number] : component}) : {number}?
+function DefaultQueryCache.getCached(self : DefaultQueryCache, components : {[number] : string}) : {number}?
     local cacheElement : cacheElement = self:_executeOnCacheElement(
         components,
         _CacheCommands.GET_COMMAND,
@@ -571,7 +547,7 @@ end
 
 -- isCached does not read the cacheElement and so, does not protect it from being cleaned up.
 -- if you wanna call read on it, consider using :getCached()
-function DefaultQueryCache.isCached(self : DefaultQueryCache, components : {[number] : component}) : boolean
+function DefaultQueryCache.isCached(self : DefaultQueryCache, components : {[number] : string}) : boolean
     -- check if the cache element exists and if it has an entityPool (if it
     -- is not in a state where its just part of an archetype definition
     -- throught the cache)
@@ -613,16 +589,16 @@ function DefaultQueryCache.lifecycleCache(self : DefaultQueryCache)
     end
 end
 
-local function _findPartiallyCachedArchetype(cacheElement : cacheElement, components : {[number] : component})
+local function _findPartiallyCachedArchetype(cacheElement : cacheElement, components : {[number] : string})
     local continueSearch = #components > 1
-    for k, component in ipairs(components) do
-        if cacheElement.pairs ~= nil and cacheElement.pairs[component] ~= nil then
+    for k, componentName in ipairs(components) do
+        if cacheElement.pairs ~= nil and cacheElement.pairs[componentName] ~= nil then
             if continueSearch then
                 local newComponents = table.clone(components)
                 table.remove(newComponents, k)
                 -- recursively search for the next components
                 local newCacheElement = _findPartiallyCachedArchetype(
-                    cacheElement.pairs[component],
+                    cacheElement.pairs[componentName],
                     newComponents
                 )
                 if newCacheElement ~= cacheElement then
@@ -631,14 +607,14 @@ local function _findPartiallyCachedArchetype(cacheElement : cacheElement, compon
                 newComponents = nil
             else
                 -- found the cacheElement
-                return cacheElement.pairs[component]
+                return cacheElement.pairs[componentName]
             end
         end
     end
     return cacheElement, components
 end
 
-function DefaultQueryCache.cacheArchetype(self : DefaultQueryCache, components : {[number] : component}, cachedEntityIds : {number})
+function DefaultQueryCache.cacheArchetype(self : DefaultQueryCache, components : {[number] : string}, cachedEntityIds : {number})
     -- if the first cacheElement doesnt exist then create it
     if self._cache[components[1]] == nil then
         self._cache[components[1]] = {
@@ -680,31 +656,31 @@ function DefaultQueryCache.cacheArchetype(self : DefaultQueryCache, components :
     local nextComponents = table.clone(components)
     -- caculate the base archetype for the cacheElement by substracting
     -- the two archetypes
-    for _, component in ipairs(restComponents) do
+    for _, componentName in ipairs(restComponents) do
         for k, otherComponent in ipairs(components) do
-            if component == otherComponent then
+            if componentName == otherComponent then
                 nextComponents[k] = nil
             end
         end
     end
 
     -- reorder the table
-    for k, component in pairs(nextComponents) do
+    for k, componentName in pairs(nextComponents) do
         if k > #nextComponents then
-            nextComponents[#nextComponents + 1] = component
+            nextComponents[#nextComponents + 1] = componentName
             nextComponents[k] = nil
         end
     end
 
     if #restComponents > 0 then
         -- create a cacheElement for each component of the archetype
-        for _, component in ipairs(restComponents) do
-            -- add the component to cacheElement's archetype data
-            table.insert(nextComponents, component)
+        for _, componentName in ipairs(restComponents) do
+            -- add the componentName to cacheElement's archetype data
+            table.insert(nextComponents, componentName)
             -- pair the cacheElement with the parent one
-            nextCacheElement.pairs = {[component] = {}}
+            nextCacheElement.pairs = {[componentName] = {}}
             -- prepare for the next iteration
-            nextCacheElement = nextCacheElement.pairs[component]
+            nextCacheElement = nextCacheElement.pairs[componentName]
             -- nextComponents = table.clone(nextComponents)
         end
     end
@@ -714,15 +690,15 @@ function DefaultQueryCache.cacheArchetype(self : DefaultQueryCache, components :
     nextCacheElement.entityPool:initialize(cachedEntityIds)
 end
 
-function DefaultQueryCache.uncacheArchetype(self : DefaultQueryCache, components : {[number] : component})
+function DefaultQueryCache.uncacheArchetype(self : DefaultQueryCache, components : {[number] : string})
     self:_executeOnCacheElement(components, _CacheCommands.UNCACHE_COMMAND, true)
 end
 
 function DefaultQueryCache.notifyCacheSpawnedEntity(self : DefaultQueryCache, entityId : number, entity : entity)
     local command = _CacheCommands.ADD_ENTITY:new({entityId = entityId})
     local archetype = {}
-    for _, componentInstance in pairs(entity) do
-        table.insert(archetype, getmetatable(componentInstance))
+    for componentName, _ in pairs(entity) do
+        table.insert(archetype, componentName)
     end
 
     self:_executeOnArchetypeComposite(archetype, command, false)
@@ -731,8 +707,8 @@ end
 function DefaultQueryCache.notifyCacheDespawnedEntity(self : DefaultQueryCache, entityId : number, entity : entity)
     local command = _CacheCommands.REMOVE_ENTITY:new({entityId = entityId})
     local archetype = {}
-    for _, componentInstance in pairs(entity) do
-        table.insert(archetype, getmetatable(componentInstance))
+    for componentName, _ in pairs(entity) do
+        table.insert(archetype, componentName)
     end
 
     self:_executeOnArchetypeComposite(archetype, command, false)
@@ -741,17 +717,17 @@ end
 --[=[
     @within QueryCache
     @function _notifyCacheEntityComponentInserted
-    @param components {component} -- the archetype of the entity
-    @param component component -- the inserted component
+    @param components {string} -- the archetype of the entity
+    @param componentName string -- the inserted component's name
     @return nil
 
     Handles whenever an entity receives a component to redistribute it
     in the right cacheElements
 ]=]
-function DefaultQueryCache.notifyCacheEntityComponentInserted(self : DefaultQueryCache, entityId : number, components : {component}, component : component)
+function DefaultQueryCache.notifyCacheEntityComponentInserted(self : DefaultQueryCache, entityId : number, components : {string}, componentName : string)
     local command = _CacheCommands.ADD_ENTITY_TO_UNNOTIFIED_CACHE_ELEMENT:new({
         entityId = entityId,
-        component = component
+        componentName = componentName
     })
 
     self:_executeOnArchetypeComposite(components, command, true)
@@ -760,17 +736,17 @@ end
 --[=[
     @within QueryCache
     @function _notifyCacheEntityComponentRemoved
-    @param components {component} -- the archetype of the entity
-    @param component component -- the removed component
+    @param components {string} -- the archetype of the entity
+    @param componentName string -- the name of the removed component
     @return nil
 
     Handles whenever an entity removes a component to redistribute it
     in the right cacheElements
 ]=]
-function DefaultQueryCache.notifyCacheEntityComponentRemoved(self : DefaultQueryCache, entityId : number, components : {component}, component : component)
+function DefaultQueryCache.notifyCacheEntityComponentRemoved(self : DefaultQueryCache, entityId : number, components : {string}, componentName : string)
     local command = _CacheCommands.REMOVE_ENTITY_FROM_UNNOTIFIED_CACHE_ELEMENT:new({
         entityId = entityId,
-        component = component
+        componentName = componentName
     })
 
     self:_executeOnArchetypeComposite(components, command, true)

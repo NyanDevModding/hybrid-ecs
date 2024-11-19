@@ -29,14 +29,6 @@ local MAX_RECYCLE_BIN_SIZE = 16
 export type WorldHypothesisMergerClass = typeof(WorldHypothesisMerger)
 export type WorldHypothesisMerger = typeof(WorldHypothesisMerger.new())
 
-local function entityToComponentList(entity : entity)
-    local componentList = {}
-    for _, componentInstance in pairs(entity) do
-        table.insert(componentList, componentInstance)
-    end
-    return componentList
-end
-
 function WorldHypothesisMerger.new(world : HypothesisWorldInterface)
     -- recycling
     if _recycleBin[1] ~= nil then
@@ -127,22 +119,38 @@ function WorldHypothesisMerger.mergeIn(self : WorldHypothesisMerger, hypothesisS
             -- change
             -- removals :
             for componentName, _ in worldEntity:iterate() do
-                if changeEntity[componentName] == nil and mergedEntity[componentName] == nil then
+                if changeEntity[componentName] == nil then
                     mergedEntity[componentName] = nil
                 end
             end
 
             -- insertions :
-            for componentName, componentInstance in pairs(changeEntity) do
-                -- also checks if the component hadn't been removed by another
-                -- merged hypothesis
-                if mergedEntity[componentName] == nil and worldEntity[componentName] == nil then
-                    mergedEntity[componentName] = componentInstance
+            for componentName, component in pairs(changeEntity) do
+                -- if there is nothing in both the merger and the world
+                if worldEntity[componentName] == nil and mergedEntity[componentName] == nil then
+                    -- total insertion
+                    mergedEntity[componentName] = component:clone()
+                    continue
                 end
+
+                -- if there is already something in the merger then fuse.
+                if mergedEntity[componentName] ~= nil then
+                    -- fuse insertion
+                    mergedEntity[componentName]:fuseWith(changeEntity[componentName])
+                    continue
+                end
+
+                -- the other case : if the component is in the world and not
+                -- in the merger -> means that there was a removal, do not
+                -- insert
             end
         else
             -- just spawn it in the merger
-            self._mergedStorage[entityId] = table.clone(hypothesisStorage[entityId])
+            local mergedEntity = {}
+            for componentName, component in pairs(hypothesisStorage[entityId]) do
+                mergedEntity[componentName] = component:clone()
+            end
+            self._mergedStorage[entityId] = mergedEntity
         end
     end
 
@@ -188,23 +196,24 @@ function WorldHypothesisMerger.commit(self : WorldHypothesisMerger)
 
                 -- removed component
                 if entity[componentName] == nil then
-                    self._world:remove(entityId, getmetatable(componentInstance))
+                    self._world:remove(entityId, componentName)
                     continue
                 end
 
                 -- if entity[componentName] ~= nil
-                self._world:insert(entityId, entity[componentName])
+                self._world:insert(entityId, componentName, entity[componentName])
             end
 
             -- check for entirely new components
             for componentName, _ in pairs(entity) do
                 if worldEntity[componentName] == nil then
-                    self._world:insert(entityId, entity[componentName])
+                    self._world:insert(entityId, componentName, entity[componentName])
                 end
             end
         else
             -- spawn
-            self._world:spawnAt(entityId, entityToComponentList(entity))
+            -- entity can be considered as a componentDict
+            self._world:spawnAt(entityId, entity)
         end
     end
 
@@ -222,6 +231,16 @@ end
 ]=]
 function WorldHypothesisMerger.getNextId(self : WorldHypothesisMerger)
     return self._idProvider:getNextId()
+end
+
+--[=[
+    @within WorldHypothesisMerger
+    @function get
+
+    Return the merged entity at the given id.
+]=]
+function WorldHypothesisMerger.get(self : WorldHypothesisMerger, entityId : number)
+    return self._mergedStorage[entityId]
 end
 
 --[=[
