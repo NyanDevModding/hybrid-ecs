@@ -3,13 +3,13 @@
 local Component = require(script.Parent.Parent.component.Component)
 local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
 local EntityMirror = require(script.Parent.EntityMirror)
-local WorldHypothesis = require(script.Parent.hypothesis.WorldHypothesis)
 
 local WorldTypes = require(script.Parent.WorldTypes)
 local QueryCacheInterfaceModule = require(script.Parent.query_cache.QueryCacheInterface)
 local IdProviderInterfaceModule = require(script.Parent.id_provider.IdProviderInterface)
 
 type Component = Component.Component
+type Supervisor = typeof(require(script.Parent.Parent.component.Supervisor).new())
 type RegisteredComponent = RegisteredComponent.RegisteredComponent
 
 type entity = WorldTypes.entity
@@ -17,7 +17,7 @@ export type EntityMirror = EntityMirror.EntityMirror
 
 type QueryCacheInterface = QueryCacheInterfaceModule.QueryCacheInterface
 type IdProviderInterface = IdProviderInterfaceModule.IdProviderInterface
-type WorldHypothesis = WorldHypothesis.WorldHypothesis
+type WorldHypothesis = typeof(require(script.Parent.hypothesis.WorldHypothesis).new())
 
 -- implemented by WorldProxy
 
@@ -38,8 +38,9 @@ export type WorldInterface = {
     get : (self : WorldInterface, entityId : number) -> EntityMirror?,
     contains : (self : WorldInterface, entityId : number) -> boolean,
     insert : (self : WorldInterface, entityId : number, componentName : string, component : Component) -> nil,
+    supervise : (self : WorldInterface, entityId : number) -> Supervisor,
     remove : (self : WorldInterface, entityId : number, componentName : string) -> nil,
-    getComponent : (self : WorldInterface, entityId : number, componentName : string) -> Component,
+    getComponent : (self : WorldInterface, entityId : number, componentName : string) -> Component?,
     getQueryIterator : (self : WorldInterface, archetype : {string}?) -> {number},
     query : (self : WorldInterface, ...RegisteredComponent) -> (() -> number),
     readQuery : (self : WorldInterface, ...RegisteredComponent) -> (() -> number),

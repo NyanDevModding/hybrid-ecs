@@ -9,7 +9,8 @@ do
     function TestComponent.new(v, v2)
         return setmetatable({
             value = v,
-            secondValue = v2
+            secondValue = v2,
+            removed = false
         }, TestComponent)
     end
 
@@ -19,6 +20,22 @@ do
 
     function TestComponent.getSecondValue(self)
         return self.secondValue
+    end
+
+    function TestComponent.formatClone(self, clone)
+        -- Component.formatClone(self, clone)
+        clone.value = self.value
+        clone.secondValue = self.secondValue
+    end
+
+    function TestComponent.fuseWith(self, other)
+        Component.fuseWith(self, other)
+        self.value = if self.value ~= nil then self.value else other:getValue()
+        self.secondValue = if self.secondValue ~= nil then self.secondValue else other:getSecondValue()
+    end
+
+    function TestComponent.onRemoved(self)
+        self.removed = true
     end
 end
 
@@ -148,6 +165,38 @@ return function ()
                 testComposite:insertAt(18, SOME_COMPONENT:build())
 
                 expect(testComposite:getSize()).to.be.equal(3)
+            end)
+            it("should get a numero from a component", function()
+                local testComposite = SOME_COMPONENT:buildComposite()
+                local c1, c2, c3 = SOME_COMPONENT:build(), SOME_COMPONENT:build(), SOME_COMPONENT:build()
+                testComposite:insertAt(2, c1)
+                testComposite:insertAt(5, c2)
+                testComposite:insertAt(18, c3)
+
+                expect(testComposite:getNumero(c1)).to.be.equal(2)
+                expect(testComposite:getNumero(c2)).to.be.equal(5)
+                expect(testComposite:getNumero(c3)).to.be.equal(18)
+            end)
+            it("should call the onRemoved method when removing it from the composite", function()
+                local testComposite = SOME_COMPONENT:buildComposite()
+                local c1, c2, c3 = SOME_COMPONENT:build(), SOME_COMPONENT:build(), SOME_COMPONENT:build()
+                testComposite:insertAt(2, c1)
+                testComposite:insertAt(5, c2)
+                testComposite:insertAt(18, c3)
+                expect(c1.removed).to.be.equal(false)
+                expect(c2.removed).to.be.equal(false)
+                expect(c3.removed).to.be.equal(false)
+
+                testComposite:removeAt(2, nil, nil, nil)
+
+                expect(c1.removed).to.be.equal(true)
+                expect(c2.removed).to.be.equal(false)
+                expect(c3.removed).to.be.equal(false)
+
+                testComposite:concreteClear()
+
+                expect(c2.removed).to.be.equal(true)
+                expect(c3.removed).to.be.equal(true)
             end)
         end)
         describe("Blank system", function()

@@ -1,5 +1,6 @@
 local WorldHypothesisMerger = require(script.Parent.WorldHypothesisMerger)
 local Component = require(script.Parent.Parent.Parent.component.Component)
+local Supervisor = require(script.Parent.Parent.Parent.component.Supervisor)
 local RegisteredComponent = require(script.Parent.Parent.Parent.component.RegisteredComponent)
 local EntityMirror = require(script.Parent.Parent.EntityMirror)
 
@@ -228,12 +229,18 @@ function WorldHypothesis.despawn(self : WorldHypothesis, entityId : number)
         self:contains(entityId),
         "the entity you want to despawn does not exist."
     )
+    if self._additionalStorage[entityId] == nil then
+        self:_shadowWorldEntity(entityId)
+    end
     local entity = self._additionalStorage[entityId]
 
-    if entity ~= nil then -- if the entity is located in the hypothesis
-        -- then just delete it
-        self._additionalStorage[entityId] = nil
-    else -- if its located in the world
+    -- notify the components
+    for componentName, _ in pairs(entity) do
+        self:remove(entityId, componentName)
+    end
+
+    self._additionalStorage[entityId] = nil
+    if self._world:contains(entityId) == true then -- if it is located in the world
         -- then mark it for deletion
         -- we already know that it isn't already marked thanks to the
         -- assertion at the beginning of the method.
@@ -339,6 +346,27 @@ function WorldHypothesis.insert(self : WorldHypothesis, entityId : number, compo
 end
 
 --[=[
+    @within WorldProxy
+    @function supervise
+    @param entityId number -- the id of the entity to supervise
+    @return Supervisor -- the supervisor of the entity
+
+    Return a supervisor of an entity, check Supervisor.luau for more info
+]=]
+function WorldHypothesis.supervise(self : WorldHypothesis, entityId : number)
+    local supervisor = self:getComponent(entityId, Supervisor.REGISTERED:getName())
+
+    -- already supervised
+    if supervisor then
+        return supervisor
+    end
+
+    supervisor = WorldHypothesis.REGISTERED:build(self, entityId)
+    self:insert(entityId, Supervisor.REGISTERED:getName(), supervisor)
+    return supervisor
+end
+
+--[=[
     @within WorldHypothesis
     @function remove
     @param entityId number -- the id of the entity from which the component is
@@ -349,11 +377,27 @@ end
 ]=]
 function WorldHypothesis.remove(self : WorldHypothesis, entityId : number, componentName : string)
     assert(
-        self:contains(entityId) and self:getComponent(entityId, componentName) ~= nil,
+        self:contains(entityId),
         string.format(
             "Error while removing the component :\n    - %s\n" ..
-            "for the entity entity at \n    - #%i\n" ..
-            "The component isn't present in the entity.",
+            "for the entity at \n    - #%i\n" ..
+            "The entity isn't present.",
+            componentName,
+            entityId
+        )
+    )
+
+    -- check if there is a shadowed version in the world, else shadow it.
+    -- returns the component. If this component is neither in the world nor
+    -- in the hypothesis then throw.
+    local component = self:getComponent(entityId, componentName)
+    assert(
+        component ~= nil,
+        string.format(
+            "Error while removing the component :\n    - %s\n" ..
+            "for the entity at \n    - #%i\n" ..
+            "The component isn't present in the entity. Check if you" ..
+            "didn't previously removed it or if you checked its presence.",
             componentName,
             entityId
         )
@@ -364,6 +408,7 @@ function WorldHypothesis.remove(self : WorldHypothesis, entityId : number, compo
         self:_shadowWorldEntity(entityId)
     end
     self._additionalStorage[entityId][componentName] = nil
+    component:onRemoved(componentName, entityId, self)
 end
 
 --[=[

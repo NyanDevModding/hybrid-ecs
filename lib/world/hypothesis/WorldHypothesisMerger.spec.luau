@@ -22,6 +22,17 @@ do
     function TestComponent.getSecondValue(self)
         return self.secondValue
     end
+
+    function TestComponent.fuseWith(self, other)
+        Component.fuseWith(self, other)
+        self.value = if self.value ~= nil then self.value else other:getValue()
+        self.secondValue = if self.secondValue ~= nil then self.secondValue else other:getSecondValue()
+    end
+
+    function TestComponent.formatClone(self, clone)
+        clone.value = self.value
+        clone.secondValue = self.secondValue
+    end
 end
 
 local MAX_REYCLE_BIN_SIZE = 16

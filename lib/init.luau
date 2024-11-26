@@ -3,9 +3,9 @@ local EntityMirror  = require(script.world.EntityMirror)
 local Loop = require(script.Loop)
 local Component = require(script.component.Component)
 local CompositeComponent = require(script.component.CompositeComponent)
+local Supervisor = require(script.component.Supervisor)
 local RegisteredComponent = require(script.component.RegisteredComponent)
 local RegisteredMultiComponent = require(script.component.RegisteredMultiComponent)
-local EntityLink = require(script.EntityLink)
 
 local WorldInterfaceModule = require(script.world.WorldInterface)
 
@@ -145,33 +145,6 @@ Hybrid.multiComponent = registerCompositeComponent
 
 --[=[
     @within Hybrid
-    @class EntityLink
-
-    The entityLinks provide a securised and encapsulated way to store a
-    reference from an entity to another. They contain several method to
-    manipulate the reference and 2 hooks to catch when something happens.
-
-    An entityLink should be stored as a field of a component :
-    componentInstance
-    ├ link1 : EntityLink
-    └ link2 : EntityLink
-
-    ```lua
-    -- 2 times setup
-    local entity = world:spawn({
-        someComponent({
-            -- component fields
-        })
-    })
-    entity:insert(someComponent:patch({
-        link = Entitylink.new(entity.id)
-    }))
-    ```
-]=]
-Hybrid.EntityLink = EntityLink
-
---[=[
-    @within Hybrid
     @prop Component
 
     Abstract class component, to inherit to create a child component class
@@ -201,5 +174,18 @@ Hybrid.Component = Component
     multiComponent.
 ]=]
 Hybrid.CompositeComponent = CompositeComponent
+
+--[=[
+    @within Hybrid
+    @prop Supervisor
+
+    A component that store data about its entity, it can be referenced to get
+    these datas.
+
+    It should be added like so : ``world:supervise(entityId)``
+
+    This component class is given for you to extend it if needed.
+]=]
+Hybrid.Supervisor = Supervisor
 
 return table.freeze(Hybrid)

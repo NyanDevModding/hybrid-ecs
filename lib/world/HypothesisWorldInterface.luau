@@ -4,9 +4,10 @@ local WorldTypes = require(script.Parent.WorldTypes)
 
 local IdProviderInterfaceModule = require(script.Parent.id_provider.IdProviderInterface)
 
-type EntityMirror = typeof(require(script.Parent.EntityMirror))
+type EntityMirror = typeof(require(script.Parent.EntityMirror).new())
 -- type EntityMirror = EntityMirror.EntityMirror
 type Component = Component.Component
+type Supervisor = typeof(require(script.Parent.Parent.component.Supervisor).new())
 type RegisteredComponent = RegisteredComponent.RegisteredComponent
 
 type defaultComponentInstance = WorldTypes.defaultComponentInstance
@@ -28,6 +29,7 @@ export type HypothesisWorldInterface = {
     get : (self : HypothesisWorldInterface, entityId : number) -> EntityMirror?,
     contains : (self : HypothesisWorldInterface, entityId : number) -> boolean,
     insert : (self : HypothesisWorldInterface, entityId : number, componentName : string, component : Component) -> nil,
+    supervise : (self : HypothesisWorldInterface, entityId : number) -> Supervisor,
     remove : (self : HypothesisWorldInterface, entityId : number, componentName : string) -> nil,
     getComponent : (self : HypothesisWorldInterface, entityId : number, componentType : RegisteredComponent) -> defaultComponentInstance,
     getQueryIterator : (self : HypothesisWorldInterface, archetype : {string}?) -> {number},

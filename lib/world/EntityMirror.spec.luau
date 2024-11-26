@@ -11,6 +11,10 @@ do
             value = v
         }, TestComponent)
     end
+
+    function TestComponent.formatClone(self, clone)
+        clone.value = self.value
+    end
 end
 
 return function ()

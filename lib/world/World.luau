@@ -1,4 +1,5 @@
 local Component = require(script.Parent.Parent.component.Component)
+local Supervisor = require(script.Parent.Parent.component.Supervisor)
 local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
 
 local DefaultQueryCache = require(script.Parent.query_cache.DefaultQueryCache)
@@ -472,6 +473,11 @@ function World.despawn(self : World, entityId : number)
     local entity = chunk[_getChunkRelativeId(self, chunkNumero, entityId)]
     assert(entity ~= nil, "the entity you want to despawn does not exist.")
 
+    -- notify every components (onRemoved())
+    for componentName, _ in pairs(entity) do
+        self:remove(entityId, componentName)
+    end
+
     chunk[_getChunkRelativeId(self, chunkNumero, entityId)] = nil
 
     self._idProvider:unuseId(entityId)
@@ -574,6 +580,12 @@ function World.insert(self : World, entityId : number, componentName : string, c
     -- component inserted or removed
     -- replaced is whether if the entity is already there or not
     local replaced = entity[componentName] ~= nil
+
+    if replaced then
+        -- update the reference to point to the new component
+        entity[componentName]:onReplacing(component, componentName, entityId, self)
+    end
+
     entity[componentName] = component
 
     -- if it is replacing a component from the same type as him, then there has
@@ -591,6 +603,28 @@ end
 
 --[=[
     @within World
+    @function supervise
+    @param entityId number -- the id of the entity to supervise
+    @return Supervisor -- the supervisor of the entity
+
+    Return a supervisor of an entity, check Supervisor.luau for more info
+]=]
+function World.supervise(self : World, entityId : number)
+    local supervisor = self:getComponent(entityId, Supervisor.REGISTERED:getName())
+
+    -- already supervised
+    if supervisor ~= nil then
+        return supervisor
+    end
+
+    -- create the supervisor
+    supervisor = Supervisor.REGISTERED:build(self, entityId)
+    self:insert(entityId, Supervisor.REGISTERED:getName(), supervisor)
+    return supervisor
+end
+
+--[=[
+    @within World
     @function remove
     @param entityId number -- the id of the entity from which the component is
     removed
@@ -600,11 +634,13 @@ end
 ]=]
 function World.remove(self : World, entityId : number, componentName : string)
     local entity = self:_rawget(entityId)
+    local component = entity[componentName]
     assert(
-        entity[componentName] ~= nil,
+        component ~= nil,
         "the component you are trying to remove isn't present in the entity"
     )
     entity[componentName] = nil
+    component:onRemoved(componentName, entityId, self)
 
     if self._queryCache == nil then
         return

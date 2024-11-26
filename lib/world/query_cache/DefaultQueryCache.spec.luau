@@ -22,6 +22,11 @@ do
     function TestComponent.getSecondValue(self)
         return self.secondValue
     end
+
+    function TestComponent.formatClone(self, clone)
+        clone.value = self.value
+        clone.secondValue = self.secondValue
+    end
 end
 
 local function tContains(t, v)

@@ -12,6 +12,10 @@ do
             value = v
         }, TestComponent)
     end
+
+    function TestComponent.formatClone(self, clone)
+        clone.value = self.value
+    end
 end
 
 -- some tests access to the private storage of the world. This is because we
@@ -480,6 +484,10 @@ return function ()
 
                 testWorld = WorldFactory.createWorld(nil, {
                     notifyCacheSpawnedEntity = function()
+                    end,
+                    -- add the remove method as despawning implies the removal of the components
+                    notifyCacheEntityComponentRemoved = function()
+                        methodCalled = true
                     end,
                     notifyCacheDespawnedEntity = function()
                         methodCalled = true

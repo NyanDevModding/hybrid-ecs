@@ -201,12 +201,14 @@ function WorldHypothesisMerger.commit(self : WorldHypothesisMerger)
                 end
 
                 -- if entity[componentName] ~= nil
+                entity[componentName]:onCommit(componentName, entityId, self._world, self)
                 self._world:insert(entityId, componentName, entity[componentName])
             end
 
             -- check for entirely new components
             for componentName, _ in pairs(entity) do
                 if worldEntity[componentName] == nil then
+                    entity[componentName]:onCommit()
                     self._world:insert(entityId, componentName, entity[componentName])
                 end
             end

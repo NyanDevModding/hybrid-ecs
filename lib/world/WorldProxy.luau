@@ -105,6 +105,15 @@ function WorldProxy.insert(self : WorldProxy, entityId : number, componentName :
     return self._world:insert(entityId, componentName, component)
 end
 
+function WorldProxy.supervise(self : WorldProxy, entityId : number)
+    -- in case an hypothesis is listening for the changes of world
+    if self:isBuildingHypothesis() then
+        return self._world:getListenerHypothesis():supervise(entityId)
+    end
+
+    return self._world:supervise(entityId)
+end
+
 function WorldProxy.remove(self : WorldProxy, entityId : number, componentName : string)
     -- in case an hypothesis is listening for the changes of world
     if self:isBuildingHypothesis() then
