@@ -2,6 +2,7 @@ local World = require(script.world.World)
 local EntityMirror  = require(script.world.EntityMirror)
 local Loop = require(script.Loop)
 local Component = require(script.component.Component)
+local ComponentReference = require(script.component.ComponentReference)
 local CompositeComponent = require(script.component.CompositeComponent)
 local Supervisor = require(script.component.Supervisor)
 local RegisteredComponent = require(script.component.RegisteredComponent)
@@ -23,6 +24,8 @@ export type World = World.World
 export type EntityMirror = EntityMirror.EntityMirror
 export type Loop = Loop.Loop
 export type Component = Component.Component
+export type ComponentReference<T> = ComponentReference.ComponentReference<T>
+export type Supervisor = Supervisor.Supervisor
 
 --[=[
     @class Hybrid

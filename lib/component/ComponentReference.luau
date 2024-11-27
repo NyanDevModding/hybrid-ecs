@@ -16,7 +16,7 @@ export type ComponentReference<T> = {
     get : (self : ComponentReference<T>) -> T?,
     set : (self : ComponentReference<T>, component : T) -> T,
     destroy : (self : ComponentReference<T>) -> nil
-}
+} & typeof(ComponentReference.new())
 
 function ComponentReference.new(component : {}?)
     return setmetatable({
