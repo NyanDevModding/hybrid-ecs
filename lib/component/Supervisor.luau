@@ -1,6 +1,5 @@
 local Component = require(script.Parent.Component)
 local RegisteredComponent = require(script.Parent.RegisteredComponent)
-local WorldInterfaceModule = require(script.Parent.Parent.world.WorldInterface)
 
 --[=[
     @class Supervisor
@@ -22,16 +21,13 @@ Supervisor.__index = Supervisor
 Supervisor.NAME = "supervisor"
 Supervisor.REGISTERED = RegisteredComponent.new(
     Supervisor.NAME,
-    function(world : WorldInterface, entityId : number)
+    function(world : {}, entityId : number)
         return Supervisor.new(world, entityId)
     end
 )
-
-type WorldInterface = WorldInterfaceModule.WorldInterface
-
 export type Supervisor = typeof(Supervisor.new())
 
-function Supervisor.new(world : WorldInterface, entityId : number)
+function Supervisor.new(world : {}, entityId : number)
     return setmetatable({
         _world = world,
         _entityId = entityId
@@ -52,11 +48,11 @@ end
 --[=[
     @within Supervisor
     @function setWorld
-    @param world WorldProxy? -- the world where is now located the entity
+    @param world World? -- the world where is now located the entity
 
     Set the supervised entity's world
 ]=]
-function Supervisor.setWorld(self : Supervisor, world : WorldInterface?)
+function Supervisor.setWorld(self : Supervisor, world : {}?)
     self._world = world
 end
 
@@ -101,30 +97,14 @@ end
 function Supervisor.check(self : Supervisor)
     if self:isNull() then
         self:destroy()
+        return false
     end
-end
-
---[=[
-    @within Supervisor
-    @function destroy
-
-    Destroy the reference
-]=]
-function Supervisor.destroy(self : Supervisor)
-    self._world = nil
-    self._entityId = nil
-end
-
-function Supervisor.makeHypothesis(self : Supervisor, entityId : number, _, hypothesis)
-    local hypothetic = Component.makeHypothesis(self)
-    hypothetic:setWorld(hypothesis)
-    hypothetic:setEntityId(entityId)
-    return hypothetic
+    return true
 end
 
 function Supervisor.formatClone(self : Supervisor, clone : Supervisor)
     Component.formatClone(self, clone)
-
+    
     clone:setEntityId(self._entityId)
     clone:setWorld(self._world)
 end
@@ -139,9 +119,15 @@ function Supervisor.onRemoved(self : Supervisor)
     self:destroy()
 end
 
-function Supervisor.onCommit(self : Supervisor, _, entityId : number)
-    Component.onCommit(self)
-    self:setEntityId(entityId)
+--[=[
+    @within Supervisor
+    @function destroy
+
+    Destroy the reference
+]=]
+function Supervisor.destroy(self : Supervisor)
+    self._world = nil
+    self._entityId = nil
 end
 
 Supervisor.NULL = Supervisor.new()

@@ -6,16 +6,13 @@ local DefaultQueryCache = require(script.Parent.query_cache.DefaultQueryCache)
 local SimpleIdProvider = require(script.Parent.id_provider.SimpleIdProvider)
 
 local EntityMirror = require(script.Parent.EntityMirror)
-local WorldHypothesis = require(script.Parent.hypothesis.WorldHypothesis)
-local WorldHypothesisMerger = require(script.Parent.hypothesis.WorldHypothesisMerger)
 
-local WorldInterfaceModule = require(script.Parent.WorldInterface)
 local WorldTypes = require(script.Parent.WorldTypes)
 local QueryCacheInterfaceModule = require(script.Parent.query_cache.QueryCacheInterface)
 local IdProviderInterfaceModule = require(script.Parent.id_provider.IdProviderInterface)
 
 --[=[
-    @class World : HypothesisWorldInterface
+    @class World
 
     A world is a storage for entities that store themselves components. You can
     create entity by calling the method :spawn and a new world and insert
@@ -53,10 +50,6 @@ type storage = WorldTypes.storage
 
 type QueryCacheInterface = QueryCacheInterfaceModule.QueryCacheInterface
 type IdProviderInterface = IdProviderInterfaceModule.IdProviderInterface
-
-type WorldHypothesis = WorldHypothesis.WorldHypothesis
-
-type WorldInterface = WorldInterfaceModule.WorldInterface
 
 local function assertRightEntityId(entityId : number)
     assert(
@@ -104,84 +97,18 @@ function World.new(chunkSize : number?, queryCache : QueryCacheInterface?, idPro
         _idProvider = idProvider or SimpleIdProvider.new(),
 
         _caching = false,
-        _queryCache = queryCache,
-
-        _buildingHypothesis = false,
-        _listenerHypothesis = nil :: WorldHypothesis?,
-        _hypothesisStack = {},
+        _spawnRecorderStack = nil,
+        _queryCache = (
+            if queryCache == nil then
+                DefaultQueryCache.new(20)
+            elseif queryCache == false then
+                nil
+            else
+                queryCache
+        ),
 
         _loops = {}
     }, World)
-end
-
---[=[
-    @type World
-
-    @within World
-    @function openHypothesis
-
-    Open an hypothesis on the world, it will start to listen for the changes and
-    override the method to execute the changes on itself. If the world was
-    already building an hypothesis (nested query), then we store it as an old
-    hypothesis and we place the new one azs the listener.
-]=]
-function World.openHypothesis(self : World, newHypothesis : WorldHypothesis)
-    -- store the old hypothesis in case we have nested queries
-    if self._listenerHypothesis ~= nil then
-        self._hypothesisStack[#self._hypothesisStack + 1] = self._listenerHypothesis
-    end
-    self._listenerHypothesis = newHypothesis
-
-    -- start listening
-    self._buildingHypothesis = true
-end
-
---[=[
-    @within World
-    @function closeHypothesis
-
-    close the actual hypothesis, if we are in a case of a nested query, it
-    changes the hypothesis to the old one, else it just stop the hypothesis
-    building.
-]=]
-function World.closeHypothesis(self : World)
-    -- 2 possiblilities :
-    --  - nested query -> old listener, we replace the top or actual hypothesis
-    --  by the oldHypothesis
-    --  - bottom query -> last listener, we just stop listening and set it to
-    --  nil
-    -- remove the listener hypothesis and fetch the old one
-    if self._hypothesisStack[1] ~= nil then
-        self._listenerHypothesis = self._hypothesisStack[#self._hypothesisStack]
-    else
-        self._listenerHypothesis = nil
-        -- stop listening
-    end
-    self._buildingHypothesis = false
-end
-
---[=[
-    @within World
-    @function getListenerHypothesis
-
-    Getter for the listenerHypothesis, it should only be called by the
-    wrapper, as it is no use to get a raw hypothesis.
-]=]
-function World.getListenerHypothesis(self : World)
-    return self._listenerHypothesis
-end
-
---[=[
-    @within World
-    @function resetListenerHypothesis
-
-    Resets the listener of the world, this method is used when a query is
-    finished and the programm needs to launch another query so it resets the
-    listener hypothesis
-]=]
-function World.resetListenerHypothesis(self : World)
-    self._listenerHypothesis:merge()
-    self._listenerHypothesis:reset()
 end
 
 --[=[
@@ -370,23 +297,10 @@ end
 
 --[=[
     @within World
-    @function World.isBuildingHypothesis
-    @return boolean -- if the world is building an hypothesis
-
-    Return if the world is building an hypothesis and if it is listening to
-    change made to it.
-]=]
-function World.isBuildingHypothesis(self : World)
-    return self._buildingHypothesis
-end
-
---[=[
-    @within World
     @function copyIdProvider
     @return IdProviderInterface -- a clone of the idProvider
 
-    Return a clone of the id provider of the world. This method is used by the
-    hypothesis and merger to propagate the id-providing-state of the world.
+    Return a clone of the id provider of the world.
 ]=]
 function World.copyIdProvider(self : World)
     return self._idProvider:clone()
@@ -419,6 +333,11 @@ function World.spawnAt(self : World, entityId : number, componentDict : {[string
 
     if self._queryCache == nil then
         return
+    end
+
+    -- record it
+    if self._spawnRecorderStack ~= nil then
+        self:_recordSpawn(entityId)
     end
 
     -- notify the cache about the spawn of the entity
@@ -492,6 +411,41 @@ function World.despawn(self : World, entityId : number)
     end
 
     self._queryCache:notifyCacheDespawnedEntity(entityId, entity)
+end
+
+-- the spawn recording system is only used in a case of a nested AllEntities
+-- query. (very rare situation actually)
+-- it makes sure that spawned entity during an allEntities query won't be
+-- counted as part of this query.
+
+function World._startRecordingSpawn(self : World)
+    if self._spawnRecorderStack == nil then
+        self._spawnRecorderStack = {}
+    end
+    table.insert(self._spawnRecorderStack, {})
+end
+
+function World._stopRecordingSpawn(self : World)
+    table.clear(self._spawnRecorderStack[#self._spawnRecorderStack])
+    self._spawnRecorderStack[#self._spawnRecorderStack] = nil
+    if #self._spawnRecorderStack == 0 then
+        self._spawnRecorderStack = nil
+        return
+    end
+end
+
+function World._recordSpawn(self : World, entityId : number)
+    for _, t in pairs(self._spawnRecorderStack) do
+        table.insert(t, entityId)
+    end
+end
+
+function World._getRecordedSpawns(self : World)
+    if self._spawnRecorderStack == nil then
+        return nil
+    end
+
+    return self._spawnRecorderStack[#self._spawnRecorderStack]
 end
 
 --[=[
@@ -735,66 +689,80 @@ function World.addLoop(self : World, loop)
     table.insert(self._loops, loop)
 end
 
+local function getNextValidId(world : World, pool : {number}, index : number)
+    index += 1
+    if pool[index] == nil then
+        return
+    end
+
+    if world:contains(pool[index]) then
+        return index
+    else
+        return getNextValidId(world, pool, index)
+    end
+end
+
 --[=[
     @within world
     @function _factoryEveryIdQuerier
     @param pool {number} -- the entityId concerned by the query
     @return () -> number -- the iterator function
 
-    This factory method returns the iterator function of a query, it also
-    creates the hypothesis and make all the associated work like binding it to
-    a merger.
-
-    At each iteration, the hypothesis is merged into its merger and cleared for
-    the next iteration.
-
-    No problem with concurrent id use (like 2 different entities spawned at
-    the same id and then merged in a same merger) should be spotted because of
-    the merger that propagate its idProvider states to the hypothesis at each
-    reset of the latter.
-
-    At the end, it closes the hypothesis and commits the merged changes to this
-    world.
+    Return an iterator function that queries over every entities of the world.
 ]=]
-function World._factoryEveryIdQuerier(self : World, pool)
-    -- allow query in query by recursive hypothesises
-    local newMerger = WorldHypothesisMerger.new(self)
-    local newHypothesis = WorldHypothesis.new(self, newMerger)
-    self:openHypothesis(newHypothesis)
-
+function World._factoryEveryIdQuerier(self : World, pool : {number})
     local index = 0
     return function()
-        -- at the beginning of the function as this is called right after an
-        -- iteration and the loop operations
-        if index >= 1 then
-            -- merge the modifications and clear the hypothesis so it is
-            -- reusable
-            self:resetListenerHypothesis()
-        end
-
-        -- the actual iteration
-        index = index + 1
-        local entityId = pool[index]
-        if entityId then
-            return entityId
-        else
-            -- at the end, commit the changes to the associated world (this
-            -- world can be another hypothesis in the case of a nested query)
-            newMerger:commit()
-            self:closeHypothesis()
-        end
+        index = getNextValidId(self, pool, index)
+        return pool[index]
     end
 end
 
-function World._getAllEntitiesIterator(self : World)
-    local entityIterator = {}
-    for chunkNumero, chunk in pairs(self._storage) do
-        for relativeId, _ in pairs(chunk) do
-            local entityId = (chunkNumero - 1) * self.chunkSize + relativeId
-            table.insert(entityIterator, entityId)
+local function _idSpawnedDuringQuery(world : World, id : number)
+    for _, entityId in ipairs(world:_getRecordedSpawns()) do
+        if entityId == id then
+            return true
         end
     end
-    return entityIterator
+    return false
+end
+
+function World._factoryEntireWorldQuerier(self : World)
+    self:_startRecordingSpawn()
+    -- no problem with this as we do not care about any spawned 
+    local lastId = self:_getLastId()
+    local actualId = 0
+
+    return function ()
+        -- checks if we didn't reach the end
+        if actualId == lastId then
+            self:_stopRecordingSpawn()
+            return
+        end
+
+        actualId += 1
+
+        -- checks :
+        -- • if the world actually contains the entity (if it hasn't been removed in between)
+        -- • if we haven't finished the iteration (we reached the end of the world)
+        -- • if the entity hadn't been spawned during the query iteration
+        -- until it finds an entity that matches andy of these checks
+        while true do
+            if self:contains(actualId) and not _idSpawnedDuringQuery(self, actualId) then
+                break
+            end
+
+            actualId += 1
+
+            -- checks if we didn't reach the end
+            if actualId == lastId then
+                self:_stopRecordingSpawn()
+                return
+            end
+        end
+
+        return actualId
+    end
 end
 
 function World._getRawQueryIterator(self : World, archetype : {string})
@@ -841,17 +809,8 @@ end
     Return a list of entityId correspounding to the provided archetype. For a
     read only query, please use the readQuery() method (query where no change
     is being made)
-
-    :::caution:::
-    This method returns an iterator of the actual world, it does not take
-    account of any listening hypothesis
 ]=]
-function World.getQueryIterator(self : World, archetype : {string}?)
-    -- if the archetype isn't nil (we aren't iterating over all the entities)
-    if archetype == nil or #archetype == 0 then
-        return self:_getAllEntitiesIterator()
-    end
-
+function World.getQueryIterator(self : World, archetype : {string})
     -- if the world is equipped with a _queryCache
     if self._queryCache ~= nil then
         -- create componentName based archetype
@@ -859,7 +818,7 @@ function World.getQueryIterator(self : World, archetype : {string}?)
         local pool = self._queryCache:getCached(archetype)
         -- if the query is cached
         if pool ~= nil then
-            return pool -- self:_getCachedIterator(archetype, pool)
+            return table.clone(pool) -- self:_getCachedIterator(archetype, pool)
         end
 
         -- elseif the world is caching
@@ -891,11 +850,12 @@ end
     nil, in this case, it returns a pairs of the entire world.
     @return pairs
 
-    Return the result of a pairs() function on a dictionnary of entityIds.
+    Return the result an iterator function that returns every ids of the
+    entities which contain the provided archetype
 
-    using this method inside a system is more optimize then using it outside,
-    if you are using it outside, consider using the start and stopCaching
-    methods
+    Using this method inside a system is more optimize then using it outside,
+    if you are using it outside and regularly, consider using the start and
+    stopCaching methods
 
     ```lua
     -- inside a system
@@ -904,18 +864,17 @@ end
         -- do some work
     end
     ```
-
-    changes made inside a query are registered in a worldHypothesis and
-    committed after all.
-
-    :::caution:::
-    You **must** call the world:breakQuery() method if breaking out of a loop
-    because else it will start to bug.
 ]=]
 function World.query(self : World, ... : RegisteredComponent)
+    local archetype = registeredComponentToNames({...})
+
+    if #archetype == 0 then
+        return self:_factoryEntireWorldQuerier()
+    end
+
     return self:_factoryEveryIdQuerier(
         self:getQueryIterator(
-            registeredComponentToNames({...})
+            archetype
         )
     )
 end
@@ -956,11 +915,14 @@ end
 
     finish the query (when breaking out of it, it merges the hypothsis and
     commit the merger)
-
-    This method should always call the top-nested hypothesis
 ]=]
 function World.breakQuery(self : World)
-    self:getListenerHypothesis():breakQuery()
+    if self._spawnRecorderStack ~= nil then
+        table.clear(self._spawnRecorderStack[#self._spawnRecorderStack])
+        if #self._spawnRecorderStack == 0 then
+            self._spawnRecorderStack = nil
+        end
+    end
 end
 
 return World

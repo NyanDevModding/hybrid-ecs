@@ -69,17 +69,6 @@ return function ()
         expect(testSupervisor:getEntityId()).never.to.be.ok()
         expect(testSupervisor:isNull()).to.be.equal(true)
     end)
-    it("should make an hypothetic clone", function()
-        local hypothesis = {
-            get = function ()
-                return "ok"
-            end
-        }
-        local hypotheticSupervisor : Supervisor.Supervisor = testSupervisor:makeHypothesis(18, nil, hypothesis)
-
-        expect(hypotheticSupervisor:getEntityId()).to.be.equal(18)
-        expect(hypotheticSupervisor:get()).to.be.equal("ok")
-    end)
     it("should clone itself", function()
         local world = {
             get = function ()
@@ -97,11 +86,5 @@ return function ()
 
         expect(testSupervisor:getEntityId()).never.to.be.ok()
         expect(testSupervisor:isNull()).to.be.equal(true)
-    end)
-    it("should update the entityId on committed", function()
-        expect(testSupervisor:getEntityId()).to.be.equal(55)
-        testSupervisor:onCommit(nil, 18, nil, nil)
-
-        expect(testSupervisor:getEntityId()).to.be.equal(18)
     end)
 end

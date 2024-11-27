@@ -1,7 +1,7 @@
 --[=[
     @class SimpleIdProvider
 
-    Provide an id to a descendant of HypothesisWorldInterface (world or hypothesis)
+    Provide an id to a World.
 ]=]
 local SimpleIdProvider = {}
 SimpleIdProvider.__index = SimpleIdProvider
@@ -32,8 +32,7 @@ end
     @function clone
     @return SimpleIdProvider
 
-    Return a clone of the id provider and all its data, this method is used to
-    propagate id data among hypothesises and mergers.
+    Return a clone of the id provider and all its data.
 ]=]
 function SimpleIdProvider.clone(self : SimpleIdProvider)
     local clone = SimpleIdProvider.new()

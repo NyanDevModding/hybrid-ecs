@@ -58,15 +58,15 @@ end
 -- #Why update system in reference ??
 
 -- The problem with having only one ComponentReference to a component is that
--- we can't properly fuse two hypothesis with reference. Example : we have an
--- hypothesis with a component that make a reference to another but this
--- referenced component is also referenced in another hypothesis as a cloned
--- version. Thus, fusing both will end up getting separated references on the
--- same component and as we can't get the watchers of this reference, we can't
--- tell them to swap on only one of the component. The solution is to update a
--- reference to point to the other reference. A crawler janitor should crawl
--- throught a world, replacing null references by the NULL reference and
--- transforming low version of references to their updated version.
+-- we can't properly insert a component on top of another (inserting a
+-- component in an entity where there is already a component for this name).
+-- Thus, replacing one with another will end up getting separated
+-- references on the same component and as we can't get the watchers of this
+-- reference, we can't tell them to swap on only one of the component. The
+-- solution is to update a reference to point to the other reference. A crawler
+-- janitor should crawl throught a world, replacing null references by the NULL
+-- reference and transforming low version of references to their updated
+-- version.
 
 
 --[=[

@@ -1,4 +1,4 @@
-local WorldFactory  = require(script.Parent.WorldFactory)
+local World  = require(script.Parent.World)
 local Component = require(script.Parent.Parent.component.Component)
 local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
 local DefaultQueryCache = require(script.Parent.query_cache.DefaultQueryCache)
@@ -30,7 +30,7 @@ return function ()
 
     local testWorld
     beforeEach(function()
-        testWorld = WorldFactory.createWorld(nil, false)
+        testWorld = World.new(nil, false)
     end)
 
     describe("World", function()
@@ -105,7 +105,7 @@ return function ()
 
                     -- actual storage-private spec, wouldn't happen if I had
                     -- coded an composition based storage system.
-                    expect(testWorld:getRawWorld()._storage[3]).never.to.be.ok()
+                    expect(testWorld._storage[3]).never.to.be.ok()
 
                     local newId = testWorld:spawn({
                         some = SOME_COMPONENT:build()
@@ -190,7 +190,7 @@ return function ()
                         some = SOME_COMPONENT:build()
                     })
 
-                    local storage = testWorld:getRawWorld()._storage
+                    local storage = testWorld._storage
 
                     expect(storage[1]).to.be.ok()
                     expect(storage[2]).to.be.ok()
@@ -262,7 +262,7 @@ return function ()
 
                     testWorld:despawn(1)
 
-                    expect(testWorld:getRawWorld()._storage[1]).never.to.be.ok()
+                    expect(testWorld._storage[1]).never.to.be.ok()
                 end)
                 it("should throw if the chunk does not exists", function()
                     testWorld:spawnAt(65, {
@@ -359,7 +359,7 @@ return function ()
                     })
                 end
 
-                print(testWorld:getRawWorld()._storage[1])
+                print(testWorld._storage[1])
 
                 local entityAmount = 0
                 for _ in testWorld:query() do
@@ -368,7 +368,7 @@ return function ()
 
                 expect(entityAmount).to.be.equal(10)
             end)
-            it("should perform a query over the entities of the same component", function()
+            it("should perform a query over the entities of the same archetype", function()
                 local YET_ANOTHER_COMPONENT = RegisteredComponent.new("yet_another", function(v)
                     return TestComponent.new(v)
                 end)
@@ -409,7 +409,7 @@ return function ()
             end)
             it("should use the queryCache if it exists", function()
                 -- checking with the caching
-                testWorld = WorldFactory.createWorld(nil, DefaultQueryCache.new())
+                testWorld = World.new(nil, DefaultQueryCache.new())
                 testWorld:startCaching()
 
                 local YET_ANOTHER_COMPONENT = RegisteredComponent.new("yet_another", function(v)
@@ -454,23 +454,42 @@ return function ()
                     expect(AbsentComponentAmount).to.be.equal(0)
                 end
             end)
-            it("should be possible to break out a query without breaking everything", function()
-                testWorld:spawn({some = SOME_COMPONENT:build()})
-                testWorld:spawn({some = SOME_COMPONENT:build()})
+            it("should be possible to break out of a query without breaking everything", function()
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
                 
                 for _ in testWorld:query(SOME_COMPONENT) do
                     testWorld:breakQuery()
                     break
                 end
 
-                expect(testWorld:isBuildingHypothesis()).to.be.equal(false)
+                expect(testWorld:contains(1)).to.be.equal(true)
+                expect(testWorld:contains(2)).to.be.equal(true)
+            end)
+            it("shouln't include spawned entities during a query iteration in this iteration", function()
+                -- raw query test
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
+                for entityId in testWorld:query(SOME_COMPONENT) do
+                    expect(entityId > 2).never.to.be.equal(true)
+                    testWorld:spawnAt(entityId + 1, {some = SOME_COMPONENT:build()})
+                end
+
+                -- all entities query test
+                testWorld = World.new(nil, false)
+                testWorld:spawnAt(1, {some = SOME_COMPONENT:build()})
+                testWorld:spawnAt(2, {some = SOME_COMPONENT:build()})
+                for entityId in testWorld:query() do
+                    expect(entityId > 2).never.to.be.equal(true)
+                    testWorld:spawnAt(entityId + 1, {some = SOME_COMPONENT:build()})
+                end
             end)
         end)
         describe("queryCaching", function()
             it("should notify the cache about a new entity spawned", function()
                 local methodCalled = false
 
-                testWorld = WorldFactory.createWorld(nil, {
+                testWorld = World.new(nil, {
                     notifyCacheSpawnedEntity = function()
                         methodCalled = true
                     end
@@ -482,7 +501,7 @@ return function ()
             it("should notify the cache about an entity despawned", function()
                 local methodCalled = false
 
-                testWorld = WorldFactory.createWorld(nil, {
+                testWorld = World.new(nil, {
                     notifyCacheSpawnedEntity = function()
                     end,
                     -- add the remove method as despawning implies the removal of the components
@@ -501,7 +520,7 @@ return function ()
             it("should notify the cache about a component inserted, unless it replaced one of the same type", function()
                 local methodCalled = false
 
-                testWorld = WorldFactory.createWorld(nil, {
+                testWorld = World.new(nil, {
                     notifyCacheSpawnedEntity = function()
                     end,
                     notifyCacheEntityComponentInserted = function()
@@ -516,7 +535,7 @@ return function ()
             it("should notify the cache about a component removed", function()
                 local methodCalled = false
 
-                testWorld = WorldFactory.createWorld(nil, {
+                testWorld = World.new(nil, {
                     notifyCacheSpawnedEntity = function()
                     end,
                     notifyCacheEntityComponentRemoved = function()

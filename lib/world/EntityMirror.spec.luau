@@ -1,4 +1,4 @@
-local WorldFactory  = require(script.Parent.WorldFactory)
+local World  = require(script.Parent.World)
 local Component = require(script.Parent.Parent.component.Component)
 local RegisteredComponent = require(script.Parent.Parent.component.RegisteredComponent)
 
@@ -24,7 +24,7 @@ return function ()
 
     local testWorld
     beforeEach(function()
-        testWorld = WorldFactory.createWorld(nil, false)
+        testWorld = World.new(nil, false)
     end)
 
     describe("EntityMirror", function()

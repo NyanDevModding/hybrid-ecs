@@ -24,50 +24,6 @@ end
 
 --[=[
     @within Component
-    @function makeHypothesis
-    @param entityId number -- the id of the entity where the component
-    is located
-    @param componentName string -- the name of the component to create an
-    hypothethic version from
-    @param hypothesis WorldHypothesis -- the hypothesis that asks to hypothetize
-    this component
-    @param hypothesisMerger HypothesisMerger -- the merger where the
-    component can acquire data
-    @return Component -- the hypothetized component
-
-    Return a component's clone for an hypothesis. This method is called when the
-    hypothesis needs to shadow some component of the world. It is useful when
-    the component need to know some data from the merger to prevent the merge
-    from leading to bugs.
-
-    e.i. : The CompositeComponent override this method to give proper numeros
-    to new multiplied component to prevent them from being merged with others
-    in the merger as they could get the same numero.
-]=]
-function Component.makeHypothesis(self : Component, _, _, _, _)
-    return self:clone()
-end
-
---[=[
-    @within Component
-    @function fuseWith
-    @param other Component -- the other component to fuse with.
-
-    Fuse another component into this component. It should always merge the
-    other component into the this one.
-
-    Used while merging 2 components of the same type from 2 hypothesis
-
-    It adds the other component's fields to its if they are nil.
-]=]
-function Component.fuseWith(self : Component, other : Component)
-    if other:hasReference() then
-        other:getReference():update(self._reference)
-    end
-end
-
---[=[
-    @within Component
     @function formatClone
     @param clone Component -- the cloned component to format
 
@@ -119,7 +75,7 @@ end
     @param other Component -- the other component that replaces this one
     @param componentName string -- the name of the removed component
     @param entityId number -- the entity where was located the component
-    @param world WorldInterface -- the world where was located the component
+    @param world World -- the world where was located the component
 
     This listener method is called when the component is removed from its
     entity or world.
@@ -136,7 +92,7 @@ end
     @function onRemoved
     @param componentName string -- the name of the removed component
     @param entityId number -- the entity where was located the component
-    @param world WorldInterface -- the world where was located the component
+    @param world World -- the world where was located the component
 
     This listener method is called when the component is removed from its
     entity or world.
@@ -145,22 +101,6 @@ function Component.onRemoved(self : Component, _ : string, _ : number, _)
     if self._reference ~= nil then
         self._reference:destroy()
     end
-end
-
---[=[
-    @within Component
-    @function onCommit
-    @param componentName string -- the name of the committed component
-    @param entityId number -- the entity id in which the component will be committed
-    @param world HypothesisWorldInterface -- the world where is committed the
-    component (it is a raw world or an hypothesis)
-    @param merger WorldHypothesisMerger -- the merger that is currently
-    committing
-
-    This listener method is called when the component is being committed by a
-    merger to a world.
-]=]
-function Component.onCommit(_ : Component, _ : string, _ : number, _, _)
 end
 
 --[=[

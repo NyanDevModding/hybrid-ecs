@@ -1,4 +1,4 @@
-local WorldFactory  = require(script.world.WorldFactory)
+local World = require(script.world.World)
 local EntityMirror  = require(script.world.EntityMirror)
 local Loop = require(script.Loop)
 local Component = require(script.component.Component)
@@ -6,8 +6,6 @@ local CompositeComponent = require(script.component.CompositeComponent)
 local Supervisor = require(script.component.Supervisor)
 local RegisteredComponent = require(script.component.RegisteredComponent)
 local RegisteredMultiComponent = require(script.component.RegisteredMultiComponent)
-
-local WorldInterfaceModule = require(script.world.WorldInterface)
 
 local registerComponent = function(name : string, builder : (...any) -> {})
     return RegisteredComponent.new(name, builder)
@@ -21,7 +19,7 @@ local registerCompositeComponent = function(
     return RegisteredMultiComponent.new(name, builder, compositeBuilder)
 end
 
-export type World = WorldInterfaceModule.WorldInterface
+export type World = World.World
 export type EntityMirror = EntityMirror.EntityMirror
 export type Loop = Loop.Loop
 export type Component = Component.Component
@@ -32,7 +30,7 @@ export type Component = Component.Component
     Hybrid-ecs library, mainly based on matter-ecs, it is an a more object
     oriented ecs (basically, components have now methods.)
 
-    Call Hybrid.WorldFactory.createWorld() to create a new world
+    Call Hybrid.World.new() to create a new world
 
     I KNOW THAT THIS IS NOT THE PRINCIPE OF AN ECS
     I know that it leads to a not full implementation by systems but yeah
@@ -46,15 +44,15 @@ local Hybrid = {}
 
 --[=[
     @within Hybrid
-    @prop WorldFactory WorldFactory
-]=]
-Hybrid.WorldFactory = WorldFactory
-
---[=[
-    @within Hybrid
     @prop Loop Loop
 ]=]
 Hybrid.Loop = Loop
+
+--[=[
+    @within Hybrid
+    @prop World World
+]=]
+Hybrid.World = World
 
 --[=[
     @within Hybrid

@@ -5,8 +5,6 @@ CompositeComponent.__index = CompositeComponent
 
 export type CompositeComponent = typeof(CompositeComponent.new())
 
-CompositeComponent.BLANK = {"blank"}
-
 function CompositeComponent.new<component>(concreteComponentBuilder : (...any) -> component, components : {[number] : component}?)
     local instance = setmetatable({
         _concreteComponentBuilder = concreteComponentBuilder,
@@ -108,9 +106,9 @@ end
 
     :::caution:::
     Each time you call this method, you should also check if the composite
-    is empty and, so, id it should be removed.
+    is empty and so, if it should be removed.
 ]=]
-function CompositeComponent.removeAt(self : CompositeComponent, numero : number, world, entityId : number, componentName : string)
+function CompositeComponent.removeAt(self : CompositeComponent, numero : number, componentName : string, entityId : number, world)
     local component = self._multiplied[numero]
     self._multiplied[numero] = nil
     component:onRemoved(componentName, entityId, world)
@@ -146,11 +144,7 @@ end
     Return the multiplied component located at the provided numero.
 ]=]
 function CompositeComponent.get(self : CompositeComponent, numero : number)
-    return (
-        if self._multiplied[numero] == CompositeComponent.BLANK
-        then nil
-        else self._multiplied[numero]
-    )
+    return self._multiplied[numero]
 end
 
 --[=[
@@ -177,8 +171,6 @@ end
     @return number -- the number of component in the composite
 
     Return the number of multiplied components.
-
-    This method does not count BLANK.
 ]=]
 function CompositeComponent.getSize(self : CompositeComponent)
     local size = 0
@@ -206,34 +198,17 @@ end
     @param componentName string -- the name of the component
     @param entityId number -- the id of the entity where is located the
     composite
-    @param world WorldInterface -- the world where is located the entity
+    @param world World -- the world where is located the entity
+    @return boolean -- if it has been removed
 
     Check if the Composite is empty and remove it from the world if it is.
 ]=]
 function CompositeComponent.check(self : CompositeComponent, componentName : string, entityId : number, world)
-    if self:isEmpty() then
-        world:remove(entityId, componentName)
+    if not self:isEmpty() then
+        return true
     end
-    self:forceClear()
-    self._multiplied = nil
-    self._concreteComponentBuilder = nil
-end
-
---[=[
-    @within CompositeComponent
-    @function _nextValidNumero
-    @param componentName nextNumero -- the last numero, from which the
-    method searches
-    @return number -- the numero of the next id where there is 
-
-    Check if the Composite is empty and remove it from the world if it is.
-]=]
-function CompositeComponent._nextValidNumero(self : CompositeComponent, nextNumero : number)
-    if self._multiplied[nextNumero] ~= nil and self._multiplied[nextNumero] ~= CompositeComponent.BLANK then
-        return nextNumero
-    end
-
-    return self:_nextValidNumero(nextNumero + 1)
+    world:remove(entityId, componentName)
+    return false
 end
 
 --[=[
@@ -242,152 +217,28 @@ end
     @return (...) -> any, any -- an iterator function
 
     Return an iterator function to iterate over all the multiplied components.
-
-    Does not iterate if the component is BLANK.
 ]=]
 function CompositeComponent.iterate(self : CompositeComponent)
-    local numero = 0
-
-    return function ()
-        while true do
-            numero += 1
-            if numero <= self._lastNumero then
-                if self._multiplied[numero] ~= nil
-                and self._multiplied[numero] ~= CompositeComponent.BLANK
-                then
-                    return numero, self._multiplied[numero]
-                end
-            else
-                return
-            end
-        end
-    end
-end
-
---[=[
-    @within CompositeComponent
-    @function forceIterate
-    @return (...) -> any, any -- an iterator function
-
-    Iterate over any element of the composite, including blank. This method is
-    used while propagating numero usage data to an hypothesis.
-]=]
-function CompositeComponent.forceIterate(self : CompositeComponent)
     return pairs(self._multiplied)
-end
-
---[=[
-    @within CompositeComponent
-    @function iterate
-    @param numero number -- the numero to make blank
-
-    Set a component numero to blank so the create or insert methods can't
-    create a component here, preventing any bug to appear while fusing 2
-    CompositeComponent.
-]=]
-function CompositeComponent.makeBlank(self : CompositeComponent, numero : number)
-    self._multiplied[numero] = CompositeComponent.BLANK
-end
-
---[=[
-    @within CompositeComponent
-    @function iterate
-    @param numero number -- the numero to make blank
-
-    Remove every blank position in the CompositeComponent.
-]=]
-function CompositeComponent.clearBlank(self : CompositeComponent)
-    for numero, component in pairs(self._multiplied) do
-        if component == CompositeComponent.BLANK then
-            self._multiplied[numero] = nil
-        end
-    end
-end
-
---[=[
-    @within CompositeComponent
-    @function concreteClear
-
-    Clear the Composite component and just let the blank values.
-]=]
-function CompositeComponent.concreteClear(self : CompositeComponent)
-    for numero, component in pairs(self._multiplied) do
-        if component ~= CompositeComponent.BLANK then
-            self:removeAt(numero)
-        end
-    end
 end
 
 --[=[
     @within CompositeComponent
     @function clear
 
-    Clear all the components of the composite and all the BLANK values.
-
-    :::caution:::
-    if you are in a query, you **must** call the concreteClear method that
-    won't delete the BLANK values and thus keep the merger datas that prevent
-    bugs.
+    Clear all the components of the composite.
 ]=]
-function CompositeComponent.forceClear(self : CompositeComponent)
-    for numero, component in pairs(self._multiplied) do
-        if component ~= CompositeComponent.BLANK then
-            self:removeAt(numero)
-        else
-            self._multiplied[numero] = nil
-        end
-    end
-end
-
-function CompositeComponent.makeHypothesis(self : CompositeComponent, entityId : number, componentName : string, _, hypothesisMerger)
-    local hypothetic = self:clone()
-
-    local mergedEntity = hypothesisMerger:get(entityId)
-
-    -- if it is not yet merged then just clone it
-    if mergedEntity == nil or mergedEntity[componentName] == nil then
-        return hypothetic
-    end
-
-    -- replace used things in merged by blank/unknown object (not nil but
-    -- recognizable by the method fuseWith)
-    for componentNumero, _ in mergedEntity[componentName]:forceIterate() do
-        if self._multiplied[componentNumero] == nil then
-            hypothetic:makeBlank(componentNumero)
-        end
-    end
-
-    return hypothetic
-end
-
-function CompositeComponent.fuseWith(self : CompositeComponent, other : CompositeComponent)
-    -- when u call create, it lets a gap (blank value) in the numeros if these numeros in
-    -- the gaps are used in the merger
-    for numero, component in other:iterate() do
-        if self._multiplied[numero] ~= nil and self._multiplied[numero] ~= CompositeComponent.BLANK then
-            self._multiplied[numero]:fuseWith(component)
-        else
-            self._multiplied[numero] = component:clone()
-        end
+function CompositeComponent.clear(self : CompositeComponent, componentName : string, entityId : number, world)
+    for numero in pairs(self._multiplied) do
+        self:removeAt(numero, componentName, entityId, world)
     end
 end
 
 function CompositeComponent.formatClone(self : CompositeComponent, clone : CompositeComponent)
     Component.formatClone(self, clone)
 
-    local numero = 0
-    while numero <= self._lastNumero do
-        numero += 1
-        local component = self._multiplied[numero]
-
-        if self._multiplied[numero] ~= nil then
-            if component == CompositeComponent.BLANK then
-                clone:makeBlank(numero)
-                continue
-            end
-
-            clone:insertAt(numero, component:clone())
-        end
+    for numero, component in self:iterate() do
+        clone:insertAt(numero, component:clone())
     end
 
     return clone
@@ -401,7 +252,14 @@ end
 
 function CompositeComponent.onRemoved(self : CompositeComponent)
     Component.onRemoved(self)
-    self:forceClear()
+    self:destroy()
+end
+
+function CompositeComponent.destroy(self : CompositeComponent)
+    Component.destroy(self)
+    table.clear(self._multiplied)
+    self._multiplied = nil
+    self._concreteComponentBuilder = nil
 end
 
 return CompositeComponent

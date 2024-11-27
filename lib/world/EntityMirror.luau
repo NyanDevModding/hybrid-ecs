@@ -1,13 +1,11 @@
 local Component = require(script.Parent.Parent.component.Component)
 
-local HypothesisWorldInterface = require(script.Parent.HypothesisWorldInterface)
 local WorldTypes = require(script.Parent.WorldTypes)
 
 -- types
 type component = Component.Component
 type defaultComponentInstance = WorldTypes.defaultComponentInstance
 type entity = WorldTypes.entity
-type HypothesisWorldInterface = HypothesisWorldInterface.HypothesisWorldInterface
 
 --[=[
     @class EntityMirror
@@ -34,14 +32,14 @@ export type EntityMirror = typeof(EntityMirror.new())
 --[=[
     @within EntityMirror
     @function new
-    @param world HypothesisWorldInterface -- the world where the entity is located
+    @param world World -- the world where the entity is located
     @param entityId number -- the id of the entity to mirror
     @param entity {[string]: {[any] : any}} -- the entity to mirror
     @return EntityMirror instance
 
     Create a new entityMirror for the provided entity
 ]=]
-function EntityMirror.new(world : HypothesisWorldInterface, entityId : number, entity : entity)
+function EntityMirror.new(world : any, entityId : number, entity : entity)
     return setmetatable({
         world = world,
         id = entityId,
