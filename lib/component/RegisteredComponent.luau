@@ -7,7 +7,10 @@
 local RegisteredComponent = {}
 RegisteredComponent.__index = RegisteredComponent
 
-export type RegisteredComponent = typeof(RegisteredComponent.new())
+export type RegisteredComponent<Component, T...> = {
+    getName : (self : RegisteredComponent<Component>) -> string,
+    build : (self : RegisteredComponent<Component>, T...) -> Component
+}
 
 function RegisteredComponent.new(name : string, builder : (...any) -> {any})
     return setmetatable({

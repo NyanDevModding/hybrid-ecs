@@ -1,5 +1,5 @@
 # Hybrid Ecs
-4.0.1
+4.0.2
 the API is subject to change
 Reverting the uselessly enormous hypothesis system as it leads to bug and isn't useful 😔
 

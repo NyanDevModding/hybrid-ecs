@@ -11,7 +11,11 @@ local CompositeComponent = require(script.Parent.CompositeComponent)
 local RegisteredMultiComponent = table.clone(RegisteredComponent)
 RegisteredMultiComponent.__index = RegisteredMultiComponent
 
-export type RegisteredMultiComponent = typeof(RegisteredMultiComponent.new())
+export type RegisteredMultiComponent<Component, T...> = {
+    getName : (self : RegisteredMultiComponent<Component>) -> string,
+    build : (self : RegisteredMultiComponent<Component>, T...) -> Component,
+    buildComposite : (self : RegisteredMultiComponent<Component>, T...) -> CompositeComponent.CompositeComponent
+}
 
 local DEFAULT_COMPOSITE_BUILDER = function(concreteBuilder, components)
     return CompositeComponent.new(concreteBuilder, components)

@@ -21,11 +21,15 @@ local registerCompositeComponent = function(
 end
 
 export type World = World.World
-export type EntityMirror = EntityMirror.EntityMirror
 export type Loop = Loop.Loop
+export type EntityMirror = EntityMirror.EntityMirror
+
 export type Component = Component.Component
 export type ComponentReference<T> = ComponentReference.ComponentReference<T>
 export type Supervisor = Supervisor.Supervisor
+
+export type RegisteredComponent<C, T...> = RegisteredComponent.RegisteredComponent<C, T...>
+export type RegisteredMultiComponent<C, T...> = RegisteredMultiComponent.RegisteredMultiComponent<C, T...>
 
 --[=[
     @class Hybrid
