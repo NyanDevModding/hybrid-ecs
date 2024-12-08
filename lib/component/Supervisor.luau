@@ -1,5 +1,6 @@
 local Component = require(script.Parent.Component)
 local RegisteredComponent = require(script.Parent.RegisteredComponent)
+local EntityMirror = require(script.Parent.Parent.world.EntityMirror)
 
 --[=[
     @class Supervisor
@@ -25,6 +26,7 @@ Supervisor.REGISTERED = RegisteredComponent.new(
         return Supervisor.new(world, entityId)
     end
 )
+
 export type Supervisor = typeof(Supervisor.new())
 
 function Supervisor.new(world : {}, entityId : number)
@@ -41,7 +43,7 @@ end
 
     Get the supervised entity's mirror.
 ]=]
-function Supervisor.get(self : Supervisor)
+function Supervisor.get(self : Supervisor): EntityMirror.EntityMirror
     return self._world:get(self._entityId)
 end
 
@@ -104,7 +106,7 @@ end
 
 function Supervisor.formatClone(self : Supervisor, clone : Supervisor)
     Component.formatClone(self, clone)
-    
+
     clone:setEntityId(self._entityId)
     clone:setWorld(self._world)
 end

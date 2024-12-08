@@ -1,5 +1,5 @@
 # Hybrid Ecs
-4.0.2
+4.0.3
 the API is subject to change
 Reverting the uselessly enormous hypothesis system as it leads to bug and isn't useful 😔
 
@@ -72,7 +72,7 @@ Query is performed in a serialized manner. Every query is executed one after the
 
 ### Component Referencing only
 The purpose of this Library is to never store any reference to the world in any component (as in this case changes are difficult to track).
-As I can't imagine all the parameters that we would have to pass to any method of a component (like ``component:doSomething(world, entityId, componentName, actualParameters)``). And using memory to store a world reference, an entityId and a componentName in each component is just not possible. 
+As I can't imagine all the parameters that we would have to pass to any method of a component (like ``component:doSomething(world, entityId, componentName, actualParameters)``). And using memory to store a world reference, an entityId and a componentName in each component is just not possible.
 Components must reference others by storing a ComponentReference :
 
 ```lua
